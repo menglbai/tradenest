@@ -1,0 +1,38 @@
+# 开发环境一键启动：PostgreSQL + Redis
+# 使用：docker compose -f docker/docker-compose.dev.yml up -d
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tradenest-postgres
+    environment:
+      POSTGRES_USER: tradenest
+      POSTGRES_PASSWORD: tradenest_dev
+      POSTGRES_DB: tradenest
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradenest"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tradenest-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:

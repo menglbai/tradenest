@@ -1,0 +1,65 @@
+[project]
+name = "tradenest"
+version = "0.0.1"
+description = "Your private AI investment research companion. Where your where smart investment ideas dock."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "TradeNest Contributors" }
+]
+keywords = ["investment", "stock", "ai-agent", "claude", "research", "memory"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+[tool.uv.workspace]
+members = ["packages/server"]
+
+# ---- Ruff ----
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "ASYNC",# flake8-async
+    "S",    # bandit (security)
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "S101",   # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "N"]
+
+# ---- mypy ----
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+# ---- pytest ----
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["packages/server/tests"]
+python_files = "test_*.py"
+addopts = "-v --tb=short --strict-markers"

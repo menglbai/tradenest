@@ -1,0 +1,150 @@
+# TradeNest Week 1 TODO
+
+> 第一周目标：**搭起骨架，跑通最小 Agent loop，证明这事能做**
+
+启动日期：2026-05-13（周三）
+
+---
+
+## Day 1（今天/明天 · 2-4 小时）
+
+> 目标：**把仓库建起来，跑通 mvp.py 看到第一个 AI 输出**
+
+- [ ] **1.1**（5 min）GitHub 上创建 Private 仓库 `tradenest`
+  - Description: `Your private AI investment research companion. Where your investment ideas come home to grow.`
+  - 不勾选 README/LICENSE/.gitignore（我们已经准备好了）
+- [ ] **1.2**（5 min）clone 到本地 + 把 `tradenest-init/` 里所有文件复制进去
+- [ ] **1.3**（10 min）首次 commit 推上去
+  ```bash
+  git add .
+  git commit -m "feat: initial scaffold with Anthropic Agent SDK MVP"
+  git push origin main
+  ```
+- [ ] **1.4**（10 min）安装本机依赖
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh   # 装 uv
+  npm i -g pnpm                                       # 装 pnpm（晚点用）
+  ```
+- [ ] **1.5**（5 min）配 `.env`：填入 `ANTHROPIC_API_KEY`
+- [ ] **1.6**（10 min）跑 mvp.py
+  ```bash
+  cd packages/server
+  uv sync
+  uv run python -m tradenest.mvp
+  ```
+- [ ] **1.7**（30 min）看到 AI 输出后，写一段感想到 `docs/day1-reflections.md`
+  - 输出符合预期吗？
+  - Anthropic SDK 用着如何？
+  - 接下来想做什么？
+
+**Day 1 完成标志**：终端里看到 Claude 调用 `get_stock_price` 工具，并输出对贵州茅台的分析。
+
+---
+
+## Day 2-3（周末 · 4-6 小时）
+
+> 目标：**接入真实 A 股数据**
+
+- [ ] **2.1** 装 AkShare：`uv add akshare pandas`
+- [ ] **2.2** 写 `tradenest/data/sources/akshare.py`
+  - `get_realtime_quote(code)` - 实时行情
+  - `get_history_kline(code, period)` - 历史 K 线
+  - `get_basic_info(code)` - 基本面
+- [ ] **2.3** 替换 `mvp.py` 里的 mock 工具为真实 AkShare
+- [ ] **2.4** 加一个新工具：`get_recent_news(code)`
+  - 从东方财富抓最近 7 天新闻
+- [ ] **2.5** 跑测试：让 Agent 分析"宁德时代最近怎么样"
+
+**Day 2-3 完成标志**：Agent 能用真实数据回答问题。
+
+---
+
+## Day 4-5（工作日晚上 · 各 1-2 小时）
+
+> 目标：**起 PG + Redis，写第一张表**
+
+- [ ] **4.1** 起 docker
+  ```bash
+  docker compose -f docker/docker-compose.dev.yml up -d
+  ```
+- [ ] **4.2** 装 SQLAlchemy + Alembic
+- [ ] **4.3** 设计第一张表：`research_notes`（研究笔记）
+  ```python
+  # tradenest/storage/models.py
+  class ResearchNote(Base):
+      id: int
+      stock_code: str
+      title: str
+      content: str            # markdown
+      tags: list[str]
+      embedding: Vector(1536)  # pgvector
+      created_at: datetime
+      updated_at: datetime
+  ```
+- [ ] **4.4** Alembic 创建第一个 migration + 跑通
+- [ ] **4.5** 写一个工具 `save_research_note` 让 Agent 能存笔记
+
+**Day 4-5 完成标志**：Agent 跑完分析后，把"研究笔记"自动存进 PG。
+
+---
+
+## Day 6-7（周末 · 4-6 小时）
+
+> 目标：**最简单的对话历史 + 跨会话记忆雏形**
+
+- [ ] **6.1** 设计 `conversations` + `messages` 表
+- [ ] **6.2** 改 `mvp.py` 为持久对话（每次对话有 session_id）
+- [ ] **6.3** 第二次问问题时，能拉出上次的对话历史作为上下文
+- [ ] **6.4** 写一个简单 CLI: `tradenest chat`
+- [ ] **6.5** 周复盘：写 `docs/week1-retro.md`
+  - 完成了什么？
+  - 卡在哪里？
+  - Week 2 要解决什么？
+
+**Day 6-7 完成标志**：你跟 TradeNest 聊两次，第二次它"记得"你第一次说的事。
+
+---
+
+## Week 1 验收清单
+
+第一周结束时（2026-05-19 周二），应该实现：
+
+- ✅ GitHub 仓库 `tradenest` 已建 + 至少 5 个 commit
+- ✅ MVP 能跑（Agent + 工具调用 + Claude）
+- ✅ 真实 A 股数据已接入（AkShare）
+- ✅ PG + Redis 已起 + 第一张表已建
+- ✅ 跨会话对话历史已通
+- ✅ Day 1 反思 + Week 1 复盘文档已写
+
+**Week 1 不必做的事**：
+- ❌ 多 Agent（5 分析师辩论）—— Phase 2 才做
+- ❌ 桌面客户端 —— Phase 1 末才做
+- ❌ 浏览器扩展 —— 更后期
+- ❌ 苏格拉底对话 —— 记忆系统稳定后才做
+- ❌ 主动推送 —— Phase 3
+
+---
+
+## 风险与对策
+
+| 风险 | 概率 | 对策 |
+|------|------|------|
+| API key 配置卡住 | 中 | Day 1 第一件事就是先把 mvp.py 跑通 |
+| Anthropic SDK 版本变化 | 低 | requirements.txt 锁死版本 |
+| AkShare 数据源不稳 | 中 | 备选 Tushare（需 token） |
+| 周中工作太忙没时间 | **高** | 把任务拆到 30-min 粒度，工作日晚 1 小时也能推进 |
+| 完美主义（卡在某个细节） | **高** | 严格执行 "ugly first, refactor later" |
+
+---
+
+## 关键提醒
+
+> **Week 1 不要追求漂亮代码 / 完美架构**。
+>
+> 目标是 **跑通骨架** + **建立信心** + **形成习惯**。
+>
+> 周末多写 mvp、能跑就行。代码丑没关系，Phase 1 末统一重构。
+
+---
+
+🪺  Where your investment ideas come home to grow.
