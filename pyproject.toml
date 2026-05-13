@@ -1,9 +1,9 @@
 [project]
 name = "tradenest"
 version = "0.0.1"
-description = "Your private AI investment research companion. Where your where smart investment ideas dock."
+description = "Your private AI investment research companion. Where your investment ideas come home to grow."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "TradeNest Contributors" }

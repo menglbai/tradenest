@@ -2,8 +2,8 @@
 name = "tradenest-server"
 version = "0.0.1"
 description = "TradeNest backend server (FastAPI + Agent kernel)"
-readme = "README.md"
-requires-python = ">=3.12"
+# readme = "README.md"  # 此子包不单独发布 PyPI，外层仓库根目录有 README
+requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 
 dependencies = [
