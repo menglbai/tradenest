@@ -157,8 +157,8 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_default_model: str = "deepseek-chat"
     
-    # ====== 合规 ======
-    compliance_strict: bool = True   # 严格模式：违规直接拒绝
+    # ====== 合规（已禁用） ======
+    compliance_strict: bool = False
     
     # ====== Agent 行为 ======
     agent_max_loop_turns: int = 10
