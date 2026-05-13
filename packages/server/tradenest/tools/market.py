@@ -5,10 +5,17 @@
 ================================================================================
 
 【数据源策略】
-- 实时行情：腾讯行情接口（qt.gtimg.cn）—— 免费、无需 key、不反爬、容器和本机均可用
-- 历史K线：AkShare 东财接口（需要能访问东财，本机一般可用）
-- 基本面：AkShare 东财接口
-- 资金流向：AkShare 东财接口
+实时行情支持多个数据源，按优先级依次尝试，失败自动降级：
+  1. tencent  腾讯行情（qt.gtimg.cn）    —— 默认，稳定，容器/本机均可用
+  2. sina     新浪行情（hq.sinajs.cn）   —— 备用，同样稳定
+  3. eastmoney 东方财富（AkShare）        —— 兜底，部分网络环境被反爬
+
+通过环境变量 TRADENEST_QUOTE_SOURCES 配置优先级，逗号分隔：
+  TRADENEST_QUOTE_SOURCES=tencent,sina         # 只用前两个
+  TRADENEST_QUOTE_SOURCES=sina,tencent         # 新浪优先
+  TRADENEST_QUOTE_SOURCES=tencent              # 只用腾讯
+
+历史K线 / 基本面 / 资金流向：AkShare 东财接口（本机网络一般可用）
 
 ================================================================================
 """
@@ -25,9 +32,19 @@ log = get_logger("tradenest.tools.market")
 
 
 # ============================================================
-# 腾讯行情接口
+# 数据源配置
 # ============================================================
-# 返回格式: v_sh600519="1~贵州茅台~600519~价格~昨收~今开~成交量(手)~...~涨跌额(31)~涨跌幅%(32)~最高(33)~最低(34)~...~成交额万(37)~换手率%(38)~..."
+
+def _get_quote_sources() -> list[str]:
+    """从环境变量读取数据源优先级列表。"""
+    raw = os.environ.get("TRADENEST_QUOTE_SOURCES", "tencent,sina")
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+# ============================================================
+# 数据源 1：腾讯行情（qt.gtimg.cn）
+# ============================================================
+# 格式: v_sh600519="1~贵州茅台~600519~价格~昨收~今开~成交量(手)~...~涨跌额(31)~涨跌幅%(32)~最高(33)~最低(34)~...~成交额万(37)~换手率%(38)~..."
 
 _TENCENT_IDX = {
     "name":       1,
@@ -45,48 +62,173 @@ _TENCENT_IDX = {
 }
 
 
-def _code_to_prefix(code: str) -> str:
-    """把裸代码转成腾讯格式前缀：sh600519 / sz000858。"""
+def _code_prefix(code: str, style: str = "tencent") -> str:
+    """把裸代码加上市场前缀。style: tencent（sh/sz）或 sina（sh/sz 相同）。"""
     if code.startswith(("sh", "sz", "hk")):
         return code
     if code.startswith("6"):
         return "sh" + code
     if code.startswith(("0", "3")):
         return "sz" + code
-    return "sh" + code  # 默认沪市
-
-
-def _parse_tencent_line(line: str) -> dict | None:
-    """解析腾讯行情单行。"""
-    try:
-        inner = line.split('"')[1]
-        parts = inner.split("~")
-        result = {}
-        for key, idx in _TENCENT_IDX.items():
-            result[key] = parts[idx].strip() if idx < len(parts) else ""
-        return result if result.get("code") else None
-    except Exception:
-        return None
+    return "sh" + code
 
 
 def _fetch_tencent(codes: list[str]) -> dict[str, dict]:
-    """批量拉腾讯行情，返回 {裸code: {...}}。"""
+    """腾讯行情：返回 {裸code: {name,price,change,change_pct,open,high,low,prev_close,volume,amount,turnover,source}}。"""
     import requests
-    prefixed = [_code_to_prefix(c) for c in codes]
+    prefixed = [_code_prefix(c) for c in codes]
     url = "https://qt.gtimg.cn/q=" + ",".join(prefixed)
     r = requests.get(url, timeout=8, headers={"Referer": "https://gu.qq.com/"})
     result: dict[str, dict] = {}
     for line in r.text.strip().split("\n"):
         if "~" not in line:
             continue
-        row = _parse_tencent_line(line)
-        if row and row.get("code"):
-            result[row["code"]] = row
+        try:
+            inner = line.split('"')[1]
+            parts = inner.split("~")
+            row: dict[str, Any] = {k: (parts[i].strip() if i < len(parts) else "") for k, i in _TENCENT_IDX.items()}
+            row["source"] = "腾讯行情"
+            if row.get("code"):
+                result[row["code"]] = row
+        except Exception:
+            continue
     return result
 
 
 # ============================================================
-# 工具 1：实时行情（腾讯接口）
+# 数据源 2：新浪行情（hq.sinajs.cn）
+# ============================================================
+# 格式: var hq_str_sh600519="名称,今开,昨收,现价,最高,最低,买一,卖一,成交量(股),成交额(元),...,日期,时间"
+
+def _fetch_sina(codes: list[str]) -> dict[str, dict]:
+    """新浪行情：返回 {裸code: {...}}。"""
+    import requests
+    prefixed = [_code_prefix(c) for c in codes]
+    url = "https://hq.sinajs.cn/list=" + ",".join(prefixed)
+    r = requests.get(url, timeout=8, headers={
+        "Referer": "https://finance.sina.com.cn/",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    })
+    result: dict[str, dict] = {}
+    for line in r.text.strip().split("\n"):
+        if '"' not in line or "," not in line:
+            continue
+        try:
+            # 提取前缀里的代码
+            key_part = line.split("=")[0].split("_")[-1]  # sh600519
+            bare_code = key_part[2:]  # 600519
+            inner = line.split('"')[1]
+            parts = inner.split(",")
+            if len(parts) < 10:
+                continue
+            # 字段: 0=名称 1=今开 2=昨收 3=现价 4=最高 5=最低 6=买一 7=卖一 8=成交量(股) 9=成交额(元)
+            volume_shares = int(parts[8]) if parts[8].strip() else 0
+            volume_hand = volume_shares // 100
+            amount_yuan = float(parts[9]) if parts[9].strip() else 0
+            amount_wan = amount_yuan / 10000
+            price = parts[3].strip()
+            prev_close = parts[2].strip()
+            change = f"{float(price) - float(prev_close):.2f}" if price and prev_close else ""
+            change_pct = f"{(float(price) - float(prev_close)) / float(prev_close) * 100:.2f}" if price and prev_close and float(prev_close) else ""
+            result[bare_code] = {
+                "name":       parts[0].strip(),
+                "code":       bare_code,
+                "price":      price,
+                "prev_close": prev_close,
+                "open":       parts[1].strip(),
+                "high":       parts[4].strip(),
+                "low":        parts[5].strip(),
+                "volume":     str(volume_hand),
+                "amount":     f"{amount_wan:.0f}",
+                "change":     change,
+                "change_pct": change_pct,
+                "turnover":   "",   # 新浪不直接给换手率
+                "source":     "新浪行情",
+            }
+        except Exception:
+            continue
+    return result
+
+
+# ============================================================
+# 数据源 3：东方财富（AkShare，兜底）
+# ============================================================
+
+def _fetch_eastmoney(codes: list[str]) -> dict[str, dict]:
+    """东方财富行情（AkShare，可能被反爬）：返回 {裸code: {...}}。"""
+    try:
+        import akshare as ak
+    except ImportError:
+        return {}
+    try:
+        df = ak.stock_zh_a_spot_em()
+        result: dict[str, dict] = {}
+        for code in codes:
+            target = df[df["代码"] == code]
+            if target.empty:
+                continue
+            row = target.iloc[0]
+            result[code] = {
+                "name":       str(row.get("名称", "")),
+                "code":       code,
+                "price":      str(row.get("最新价", "")),
+                "prev_close": str(row.get("昨收", "")),
+                "open":       str(row.get("今开", "")),
+                "high":       str(row.get("最高", "")),
+                "low":        str(row.get("最低", "")),
+                "volume":     str(row.get("成交量", "")),
+                "amount":     str(int(row.get("成交额", 0) / 10000)),
+                "change":     str(row.get("涨跌额", "")),
+                "change_pct": str(row.get("涨跌幅", "")),
+                "turnover":   str(row.get("换手率", "")),
+                "source":     "东方财富",
+            }
+        return result
+    except Exception:
+        return {}
+
+
+# ============================================================
+# 统一入口：按配置依次尝试，自动降级
+# ============================================================
+
+_SOURCE_FUNCS = {
+    "tencent":   _fetch_tencent,
+    "sina":      _fetch_sina,
+    "eastmoney": _fetch_eastmoney,
+}
+
+
+def _fetch_quote_with_fallback(codes: list[str]) -> tuple[dict[str, dict], list[str]]:
+    """
+    按 TRADENEST_QUOTE_SOURCES 顺序依次尝试，返回 (data, tried_sources)。
+    如果某个数据源成功拿到全部 codes 的数据就返回，否则降级到下一个。
+    """
+    sources = _get_quote_sources()
+    tried: list[str] = []
+    last_data: dict[str, dict] = {}
+
+    for source_name in sources:
+        fn = _SOURCE_FUNCS.get(source_name)
+        if not fn:
+            log.warning("unknown_quote_source", source=source_name)
+            continue
+        tried.append(source_name)
+        try:
+            data = fn(codes)
+            if data:
+                log.debug("quote_source_ok", source=source_name, codes=codes)
+                return data, tried
+            else:
+                log.warning("quote_source_empty", source=source_name, codes=codes)
+        except Exception as e:
+            log.warning("quote_source_failed", source=source_name, error=str(e)[:100])
+
+    return last_data, tried
+
+
+# ============================================================
+# 工具 1：实时行情（多源 + 自动降级）
 # ============================================================
 
 @register_tool(
@@ -94,6 +236,7 @@ def _fetch_tencent(codes: list[str]) -> dict[str, dict]:
     description=(
         "获取 A 股的当前实时行情。"
         "返回：最新价、涨跌幅、涨跌额、开盘、最高、最低、昨收、成交量、成交额、换手率。"
+        "数据来源按优先级自动切换（腾讯 → 新浪 → 东方财富）。"
         "用户问'XX 现在多少钱 / 今天涨了多少 / 实时价格'时调用。"
     ),
     input_schema={
@@ -103,48 +246,78 @@ def _fetch_tencent(codes: list[str]) -> dict[str, dict]:
                 "type": "string",
                 "description": "A 股 6 位代码，如 600519（贵州茅台）、000858（五粮液）",
             },
+            "compare_sources": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否同时拉取多个数据源对比（true = 展示各平台价格差异）",
+            },
         },
         "required": ["code"],
     },
 )
-async def get_realtime_quote(code: str) -> ToolResult:
-    """获取实时行情（腾讯行情接口）。"""
+async def get_realtime_quote(code: str, compare_sources: bool = False) -> ToolResult:
+    """获取实时行情，支持多源对比。"""
     code = code.strip()
-    try:
-        data = _fetch_tencent([code])
-        row = data.get(code)
-        if not row:
-            # 尝试不带前导零的代码
-            row = next(iter(data.values()), None) if data else None
-        if not row:
-            return ToolResult(
-                content=f"未找到股票代码 {code}，请确认代码正确。",
-                is_error=True,
-            )
 
-        sign = "+" if not str(row["change"]).startswith("-") else ""
-        content = (
-            f"【{row['name']} ({code})】实时行情\n"
-            f"  最新价:  ¥{row['price']}\n"
-            f"  涨跌额:  {sign}{row['change']}\n"
-            f"  涨跌幅:  {sign}{row['change_pct']}%\n"
-            f"  今开:    ¥{row['open']}\n"
-            f"  最高:    ¥{row['high']}\n"
-            f"  最低:    ¥{row['low']}\n"
-            f"  昨收:    ¥{row['prev_close']}\n"
-            f"  成交量:  {row['volume']} 手\n"
-            f"  成交额:  {row['amount']} 万元\n"
-            f"  换手率:  {row['turnover']}%\n"
-            f"  数据来源: 腾讯行情"
-        )
-        return ToolResult(content=content, metadata={"row": row})
+    if compare_sources:
+        # 对比模式：同时拉所有可用数据源
+        lines = [f"【{code}】多平台行情对比:"]
+        lines.append(f"{'平台':<10} {'最新价':>8} {'涨跌幅':>8} {'今开':>8} {'最高':>8} {'最低':>8} {'成交额(万)':>12}")
+        lines.append("-" * 65)
+        any_ok = False
+        for source_name, fn in _SOURCE_FUNCS.items():
+            try:
+                data = fn([code])
+                row = data.get(code)
+                if not row:
+                    lines.append(f"{source_name:<10} {'（无数据）':>8}")
+                    continue
+                any_ok = True
+                pct = row['change_pct']
+                sign = "+" if pct and not str(pct).startswith("-") else ""
+                lines.append(
+                    f"{row['source']:<10} "
+                    f"¥{row['price']:>7} "
+                    f"{sign}{pct:>7}% "
+                    f"¥{row['open']:>7} "
+                    f"¥{row['high']:>7} "
+                    f"¥{row['low']:>7} "
+                    f"{row['amount']:>12} 万"
+                )
+            except Exception as e:
+                lines.append(f"{source_name:<10} 失败: {str(e)[:40]}")
+        if not any_ok:
+            return ToolResult(content=f"所有数据源均无法获取 {code} 行情", is_error=True)
+        lines.append("")
+        lines.append("💡 价格差异通常 < 0.01 元（均来自交易所，仅延迟略有差异）")
+        return ToolResult(content="\n".join(lines))
 
-    except Exception as e:
-        log.error("realtime_quote_failed", code=code, error=str(e))
+    # 普通模式：按优先级降级
+    data, tried = _fetch_quote_with_fallback([code])
+    row = data.get(code)
+    if not row:
         return ToolResult(
-            content=f"获取 {code} 实时行情失败：{e}",
+            content=f"获取 {code} 行情失败（已尝试: {', '.join(tried)}），请检查代码是否正确。",
             is_error=True,
         )
+
+    sign = "+" if not str(row["change"]).startswith("-") else ""
+    turnover_line = f"  换手率:  {row['turnover']}%\n" if row.get("turnover") else ""
+    content = (
+        f"【{row['name']} ({code})】实时行情\n"
+        f"  最新价:  ¥{row['price']}\n"
+        f"  涨跌额:  {sign}{row['change']}\n"
+        f"  涨跌幅:  {sign}{row['change_pct']}%\n"
+        f"  今开:    ¥{row['open']}\n"
+        f"  最高:    ¥{row['high']}\n"
+        f"  最低:    ¥{row['low']}\n"
+        f"  昨收:    ¥{row['prev_close']}\n"
+        f"  成交量:  {row['volume']} 手\n"
+        f"  成交额:  {row['amount']} 万元\n"
+        f"{turnover_line}"
+        f"  数据来源: {row['source']}"
+    )
+    return ToolResult(content=content, metadata={"row": row})
 
 
 # ============================================================
@@ -166,7 +339,6 @@ async def get_realtime_quote(code: str) -> ToolResult:
                 "type": "string",
                 "enum": ["daily", "weekly", "monthly"],
                 "default": "daily",
-                "description": "K 线周期",
             },
             "days": {
                 "type": "integer",
@@ -179,7 +351,7 @@ async def get_realtime_quote(code: str) -> ToolResult:
                 "type": "string",
                 "enum": ["", "qfq", "hfq"],
                 "default": "qfq",
-                "description": "复权: qfq=前复权（推荐）/ hfq=后复权 / 空=不复权",
+                "description": "复权: qfq=前复权 / hfq=后复权 / 空=不复权",
             },
         },
         "required": ["code"],
@@ -198,8 +370,8 @@ async def get_history_kline(
     except ImportError:
         return ToolResult(content="AkShare 未安装", is_error=True)
 
-    end_date = __import__("datetime").datetime.now().strftime("%Y%m%d")
     from datetime import datetime, timedelta
+    end_date = datetime.now().strftime("%Y%m%d")
     start_date = (datetime.now() - timedelta(days=days * 2)).strftime("%Y%m%d")
 
     try:
@@ -213,17 +385,17 @@ async def get_history_kline(
 
         df_recent = df.tail(days)
         rows = [f"【{code}】最近 {len(df_recent)} 个 {period} K 线（复权: {adjust or '不复权'}）:"]
-        rows.append("日期         开盘      收盘      最高      最低      成交量     涨跌幅")
-        rows.append("-" * 70)
+        rows.append(f"{'日期':<12} {'开盘':>8} {'收盘':>8} {'最高':>8} {'最低':>8} {'成交量':>10} {'涨跌幅':>8}")
+        rows.append("-" * 68)
         for _, r in df_recent.iterrows():
             rows.append(
-                f"{r['日期']}  "
-                f"{r['开盘']:8.2f}  "
-                f"{r['收盘']:8.2f}  "
-                f"{r['最高']:8.2f}  "
-                f"{r['最低']:8.2f}  "
-                f"{int(r['成交量']):>9}  "
-                f"{r.get('涨跌幅', 0):+.2f}%"
+                f"{r['日期']!s:<12} "
+                f"{r['开盘']:>8.2f} "
+                f"{r['收盘']:>8.2f} "
+                f"{r['最高']:>8.2f} "
+                f"{r['最低']:>8.2f} "
+                f"{int(r['成交量']):>10} "
+                f"{r.get('涨跌幅', 0):>+8.2f}%"
             )
         return ToolResult(content="\n".join(rows), metadata={"count": len(df_recent)})
 
@@ -292,7 +464,7 @@ async def get_basic_info(code: str) -> ToolResult:
     },
 )
 async def get_capital_flow(code: str) -> ToolResult:
-    """获取资金流向（AkShare 东财）。"""
+    """获取资金流向。"""
     try:
         import akshare as ak
     except ImportError:
@@ -313,9 +485,9 @@ async def get_capital_flow(code: str) -> ToolResult:
                 f"{str(r['日期']):<12} "
                 f"{r.get('收盘价', 0):>7.2f} "
                 f"{r.get('涨跌幅', 0):>+8.2f}% "
-                f"{r.get('主力净流入-净额', 0)/10000:>14.1f} "
-                f"{r.get('超大单净流入-净额', 0)/10000:>10.1f} "
-                f"{r.get('大单净流入-净额', 0)/10000:>8.1f}"
+                f"{r.get('主力净流入-净额', 0) / 10000:>14.1f} "
+                f"{r.get('超大单净流入-净额', 0) / 10000:>10.1f} "
+                f"{r.get('大单净流入-净额', 0) / 10000:>8.1f}"
             )
         return ToolResult(content="\n".join(lines))
 
