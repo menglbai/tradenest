@@ -41,6 +41,7 @@ Read in this order:
 ## Quick Rules
 
 - All docs are in Chinese (中文为主, 技术术语英文)
+- **Default branch is `master`**, not `main`. Always `git push origin master` / `git pull origin master`.
 - Code style: Ruff + mypy strict (Python), Biome + tsc (TypeScript)
 - Commit format: Conventional Commits (`feat(scope): subject`)
 - Test required for: tools, agents, compliance code
