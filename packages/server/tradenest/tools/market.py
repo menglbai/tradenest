@@ -6,13 +6,14 @@
 
 【数据源策略】
 实时行情支持多个数据源，按优先级依次尝试，失败自动降级：
-  1. tencent  腾讯行情（qt.gtimg.cn）    —— 默认，稳定，容器/本机均可用
-  2. sina     新浪行情（hq.sinajs.cn）   —— 备用，同样稳定
-  3. eastmoney 东方财富（AkShare）        —— 兜底，部分网络环境被反爬
+  1. tencent   腾讯行情（qt.gtimg.cn）    —— 默认，稳定，容器/本机均可用
+  2. sina      新浪行情（hq.sinajs.cn）   —— 备用，同样稳定
+  3. ths       同花顺行情（d.10jqka.com.cn）—— 分时接口，含均价
+  4. eastmoney 东方财富（AkShare）        —— 兜底，部分网络环境被反爬
 
 通过环境变量 TRADENEST_QUOTE_SOURCES 配置优先级，逗号分隔：
-  TRADENEST_QUOTE_SOURCES=tencent,sina         # 只用前两个
-  TRADENEST_QUOTE_SOURCES=sina,tencent         # 新浪优先
+  TRADENEST_QUOTE_SOURCES=tencent,sina,ths     # 默认
+  TRADENEST_QUOTE_SOURCES=ths,tencent          # 同花顺优先
   TRADENEST_QUOTE_SOURCES=tencent              # 只用腾讯
 
 历史K线 / 基本面 / 资金流向：AkShare 东财接口（本机网络一般可用）
@@ -37,7 +38,7 @@ log = get_logger("tradenest.tools.market")
 
 def _get_quote_sources() -> list[str]:
     """从环境变量读取数据源优先级列表。"""
-    raw = os.environ.get("TRADENEST_QUOTE_SOURCES", "tencent,sina")
+    raw = os.environ.get("TRADENEST_QUOTE_SOURCES", "tencent,sina,ths")
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
@@ -151,7 +152,67 @@ def _fetch_sina(codes: list[str]) -> dict[str, dict]:
 
 
 # ============================================================
-# 数据源 3：东方财富（AkShare，兜底）
+# 数据源 3：同花顺行情（d.10jqka.com.cn 分时接口）
+# ============================================================
+# 分时接口返回当日全量分时数据，最后一条即为最新/收盘价
+# 字段：时间(HHMM),价格,成交额(元),均价,成交量(股)
+
+def _fetch_ths(codes: list[str]) -> dict[str, dict]:
+    """同花顺行情（分时接口）：返回 {裸code: {...}}。"""
+    import requests, json, re
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Referer": "https://stockpage.10jqka.com.cn/",
+    }
+    result: dict[str, dict] = {}
+    for code in codes:
+        prefix = "sh" if code.startswith("6") else "sz"
+        try:
+            url = f"https://d.10jqka.com.cn/v4/time/hs_{code}/last.js"
+            r = requests.get(url, headers=headers, timeout=8)
+            raw = re.sub(r"^[^(]+\(", "", r.text).rstrip(");")
+            data = json.loads(raw)
+            stock = data.get(f"hs_{code}", {})
+            time_data = stock.get("data", "")
+            if not time_data:
+                continue
+            # 取最后一条分时记录
+            entries = [e for e in time_data.strip().split(";") if e]
+            last = entries[-1].split(",")
+            if len(last) < 3:
+                continue
+            price = last[1]
+            prev_close = str(stock.get("pre", ""))
+            amount_yuan = float(last[2]) if last[2] else 0
+            volume_shares = int(last[4]) if len(last) > 4 and last[4] else 0
+            # 累计成交额（遍历所有分时条目）
+            total_amount = sum(float(e.split(",")[2]) for e in entries if len(e.split(",")) > 2 and e.split(",")[2])
+            total_volume = sum(int(e.split(",")[4]) for e in entries if len(e.split(",")) > 4 and e.split(",")[4])
+            change = f"{float(price) - float(prev_close):.2f}" if price and prev_close else ""
+            change_pct = f"{(float(price) - float(prev_close)) / float(prev_close) * 100:.2f}" if price and prev_close and float(prev_close) else ""
+            result[code] = {
+                "name":       stock.get("name", code),
+                "code":       code,
+                "price":      price,
+                "prev_close": prev_close,
+                "open":       "",   # 分时接口不直接给今开
+                "high":       "",   # 不直接给最高
+                "low":        "",   # 不直接给最低
+                "volume":     str(total_volume // 100),  # 转为手
+                "amount":     f"{total_amount / 10000:.0f}",  # 万元
+                "change":     change,
+                "change_pct": change_pct,
+                "turnover":   "",
+                "source":     "同花顺行情",
+            }
+        except Exception as e:
+            log.debug("ths_quote_failed", code=code, error=str(e)[:80])
+            continue
+    return result
+
+
+# ============================================================
+# 数据源 4：东方财富（AkShare，兜底）
 # ============================================================
 
 def _fetch_eastmoney(codes: list[str]) -> dict[str, dict]:
@@ -195,6 +256,7 @@ def _fetch_eastmoney(codes: list[str]) -> dict[str, dict]:
 _SOURCE_FUNCS = {
     "tencent":   _fetch_tencent,
     "sina":      _fetch_sina,
+    "ths":       _fetch_ths,
     "eastmoney": _fetch_eastmoney,
 }
 
