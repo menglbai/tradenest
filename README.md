@@ -56,6 +56,7 @@
 | 0011 | [协作规范](./docs/0011-协作规范.md) | 代码风格 + PR 流程 |
 | 0012 | [变更日志](./docs/0012-变更日志.md) | 版本变更（SemVer） |
 | 0013 | [第一周任务](./docs/0013-第一周任务.md) | Day 1 启动清单 |
+| 0014 | [启动与排错指南](./docs/0014-启动与排错指南.md) | **跑不通先看这个** |
 | 0099 | [讨论时间线](./docs/0099-讨论时间线.md) | 立项讨论历史归档 |
 
 > **AI Coding 助手**（Claude Code / Cursor 等）请先读根目录 [AGENTS.md](./AGENTS.md)。
@@ -98,28 +99,59 @@
 
 ---
 
-## 快速开始
+## 快速开始（Phase 0）
+
+> **当前是 Phase 0，只有后端 + CLI**。Tauri 桌面客户端在 Phase 1 末才做。
+>
+> **不需要 Docker / PostgreSQL / Redis**——v1 还没引入数据库。
+
+### 三步跑通
 
 ```bash
-# 1. 装依赖
-./scripts/setup.sh
+# 1. clone
+git clone https://github.com/menglbai/tradenest.git
+cd tradenest
 
-# 2. 起开发环境（PG + Redis）
-docker compose -f docker/docker-compose.dev.yml up -d
-
-# 3. 配置 API keys
-cp .env.example .env
-# 填入 ANTHROPIC_API_KEY 等
-
-# 4. 启动后端
+# 2. 装依赖（uv 自动装 Python 虚拟环境）
 cd packages/server
-uv run uvicorn tradenest.main:app --reload
+uv venv
+UV_INDEX_URL=https://artifactory.devops.xiaohongshu.com/artifactory/api/pypi/pypi-public/simple/ \
+uv pip install --allow-insecure-host artifactory.devops.xiaohongshu.com \
+  fastapi 'uvicorn[standard]' httpx anthropic akshare pandas \
+  pydantic pydantic-settings python-dotenv structlog rich sse-starlette
 
-# 5. 启动桌面客户端（另开终端）
-cd apps/desktop
-pnpm install
-pnpm tauri dev
+# 3. 跑（默认走小红书内部 codewiz LLM 网关，不需要 API key）
+uv run python -m tradenest.cli info             # 看系统信息
+uv run python -m tradenest.cli health           # 测 Provider 健康
+uv run python -m tradenest.cli ask "你好"        # 问个问题
 ```
+
+### 启动 Web 服务
+
+```bash
+cd packages/server
+uv run uvicorn tradenest.main:app --reload --port 8000
+# 浏览器打开 http://localhost:8000/docs 看 API 文档
+```
+
+### ⚠️ 不在小红书内网怎么办
+
+改 `.env` 用其他 Provider（公网 Anthropic / DeepSeek）：
+
+```env
+TRADENEST_DEFAULT_PROVIDER_ID=deepseek
+TRADENEST_DEEPSEEK_API_KEY=sk-xxxxxxxxxxx
+```
+
+### 📖 详细启动 + 排错指南
+
+**遇到任何问题**：见 [docs/0014-启动与排错指南.md](./docs/0014-启动与排错指南.md)
+
+包含：
+- 10 个常见问题（端口占用 / 依赖缺失 / 合规拦截 / 等）
+- 4 类 LLM Provider 切换方法
+- 完整配置清单
+- Debug 信息收集
 
 详见 [docs/0013-第一周任务.md](./docs/0013-第一周任务.md)。
 
