@@ -67,14 +67,50 @@ class AnthropicProvider(LLMProvider):
     def __init__(self, config: ProviderConfig) -> None:
         self.config = config
         # 创建 httpx client（保持长连接，复用更高效）
-        # 关键：trust_env=False 避免误用环境变量里的代理
-        # trust_env=False 避免误用系统代理环境变量
+        # headers 在 _resolve_headers() 里每次请求前动态算（支持 Settings 页面热更新）
         self._client = httpx.AsyncClient(
             base_url=config.base_url.rstrip("/"),
-            headers=config.headers,
             timeout=httpx.Timeout(config.timeout_seconds),
-            trust_env=True,  # 仍允许从 env 读 NO_PROXY 配置
+            trust_env=True,
         )
+
+    def _resolve_headers(self) -> dict[str, str]:
+        """每次请求前动态构建 headers，让 Settings 页面保存的 key 立即生效。
+        
+        优先级：Settings DB → 进程环境变量 → ProviderConfig 默认
+        """
+        headers = dict(self.config.headers)  # 先用启动时的默认
+        
+        # 1. 从 Settings DB 读最新 key
+        try:
+            import sqlite3, os
+            db_path = os.path.expanduser("~/.tradenest/history.db")
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                row = conn.execute(
+                    "SELECT value FROM settings WHERE key = 'gateway_api_key' AND value != ''"
+                ).fetchone()
+                conn.close()
+                if row and row[0]:
+                    headers["x-adapter-api-key"] = row[0]
+        except Exception:
+            pass
+        
+        # 2. 兜底：从环境变量再读一次（Settings 保存时也会同步进 env）
+        import os as _os
+        env_extra = _os.environ.get("TRADENEST_GATEWAY_EXTRA_HEADERS")
+        if env_extra:
+            try:
+                import json as _json
+                env_headers = _json.loads(env_extra)
+                # 只覆盖非空的字段
+                for k, v in env_headers.items():
+                    if v:
+                        headers[k] = v
+            except Exception:
+                pass
+        
+        return headers
     
     @property
     def provider_id(self) -> str:
@@ -219,7 +255,7 @@ class AnthropicProvider(LLMProvider):
         )
         
         try:
-            response = await self._client.post("/v1/messages", json=body)
+            response = await self._client.post("/v1/messages", json=body, headers=self._resolve_headers())
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             log.error(
@@ -278,7 +314,7 @@ class AnthropicProvider(LLMProvider):
         # block index → tool_use_id（SSE event 用 index 引用块）
         index_to_tool_id: dict[int, str] = {}
         
-        async with self._client.stream("POST", "/v1/messages", json=body) as resp:
+        async with self._client.stream("POST", "/v1/messages", json=body, headers=self._resolve_headers()) as resp:
             resp.raise_for_status()
             
             # SSE 解析：每行 "event: xxx\ndata: {...}\n\n"
