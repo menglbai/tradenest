@@ -410,7 +410,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 </head>
 <body>
 <canvas id="fx-canvas"></canvas>
-<div class="scanline"></div>
+
 
 <!-- TOP BAR -->
 <div class="topbar">
@@ -586,7 +586,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       <!-- 自选股 -->
       <div id="tab-watchlist">
         <div id="watchlistCards"></div>
-        <button class="add-watch-btn" onclick="addToWatchlist()">＋ 添加自选股</button>
+        <button id="addWatchBtn" class="add-watch-btn" onclick="showAddWatchForm()">＋ 添加自选股</button>
+        <div id="addWatchForm" style="display:none;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px;margin-top:8px">
+          <div style="font-size:12px;color:#aaa;margin-bottom:6px">输入股票代码</div>
+          <input id="newWatchCode" type="text" maxlength="6" placeholder="如6位代码，如 600519"
+            onkeydown="if(event.key==='Enter')submitAddWatch();if(event.key==='Escape')hideAddWatchForm()"
+            style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:13px;margin-bottom:6px">
+          <div id="newWatchTip" style="font-size:11px;color:#ef4444;min-height:14px;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px">
+            <button onclick="submitAddWatch()" style="flex:1;background:#4ade80;color:#000;border:none;border-radius:6px;padding:6px;font-size:12px;font-weight:600;cursor:pointer">添加</button>
+            <button onclick="hideAddWatchForm()" style="flex:1;background:#333;color:#aaa;border:1px solid #444;border-radius:6px;padding:6px;font-size:12px;cursor:pointer">取消</button>
+          </div>
+        </div>
         <div class="panel-empty" id="watchEmpty" style="display:none">暂无自选股<br><small>点击上方添加</small></div>
       </div>
       <!-- 预警 -->
@@ -1240,35 +1251,25 @@ function loadWatchlistCards() {
 
 async function fetchWatchlistQuotes() {
   if (watchlist.length === 0) return;
-  const symbols = watchlist.map(c => (c.startsWith('6') ? 'sh' : 'sz') + c).join(',');
+  // 走后端代转，避免浏览器跨域被拒
   try {
-    const r = await fetch(`https://hq.sinajs.cn/list=${symbols}`, {
-      headers: { Referer: 'https://finance.sina.com.cn/' }
-    });
-    const text = await r.text();
-    for (const line of text.split('\n')) {
-      if (!line.includes('"') || !line.includes(',')) continue;
-      const key = line.split('=')[0].trim().replace(/^var hq_str_/, '');
-      const code = key.slice(2);
-      const parts = line.split('"')[1]?.split(',') || [];
-      if (parts.length < 6 || !parts[3]) continue;
-      const name = parts[0], open = parts[1], prev = parts[2], price = parts[3];
-      const high = parts[4], low = parts[5];
-      const amount = parseFloat(parts[9] || '0') / 100000000;
-      const chg = (parseFloat(price) - parseFloat(prev)).toFixed(2);
-      const pct = ((parseFloat(price) - parseFloat(prev)) / parseFloat(prev) * 100).toFixed(2);
-      const up = parseFloat(chg) >= 0;
-
-      const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
-      const setC = (id, v, cls) => { const el = document.getElementById(id); if(el){el.textContent=v;el.className='qc-chg '+cls;} };
-      set(`qn_${code}`, name);
-      set(`qp_${code}`, '¥' + price);
-      setC(`qc2_${code}`, `${up?'+':''}${chg}  ${up?'+':''}${pct}%`, up?'up':'down');
-      set(`qo_${code}`, '¥' + open);
-      set(`qh_${code}`, '¥' + high);
-      set(`qa_${code}`, amount.toFixed(2) + '亿');
+    const r = await fetch('/api/user/watchlist/quotes?codes=' + watchlist.join(','));
+    const d = await r.json();
+    const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+    const setC = (id, v, cls) => { const el = document.getElementById(id); if(el){el.textContent=v;el.className='qc-chg '+cls;} };
+    for (const q of d.quotes || []) {
+      if (q.empty) {
+        set(`qn_${q.code}`, '停牌/无数据');
+        continue;
+      }
+      set(`qn_${q.code}`, q.name);
+      set(`qp_${q.code}`, '¥' + q.price);
+      setC(`qc2_${q.code}`, `${q.up?'+':''}${q.chg}  ${q.up?'+':''}${q.pct}%`, q.up?'up':'down');
+      set(`qo_${q.code}`, '¥' + q.open);
+      set(`qh_${q.code}`, '¥' + q.high);
+      set(`qa_${q.code}`, q.amount_yi + '亿');
     }
-  } catch(e) {}
+  } catch(e) { console.warn('quotes fetch failed', e); }
 }
 
 // 自选股后端 API
@@ -1281,16 +1282,31 @@ async function loadWatchlistFromServer() {
   } catch(e) { console.warn('watchlist load failed', e); }
 }
 
-async function addToWatchlist() {
-  const code = prompt('输入股票代码（如 600519）：');
-  if (!code || !/^\d{6}$/.test(code.trim())) { alert('请输入6位股票代码'); return; }
-  const name = prompt('股票名称（可留空）：') || '';
+function showAddWatchForm() {
+  document.getElementById('addWatchForm').style.display = 'block';
+  document.getElementById('addWatchBtn').style.display = 'none';
+  setTimeout(() => document.getElementById('newWatchCode').focus(), 50);
+}
+function hideAddWatchForm() {
+  document.getElementById('addWatchForm').style.display = 'none';
+  document.getElementById('addWatchBtn').style.display = 'block';
+  document.getElementById('newWatchCode').value = '';
+}
+async function submitAddWatch() {
+  const code = document.getElementById('newWatchCode').value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    document.getElementById('newWatchTip').textContent = '请输入6位股票代码';
+    return;
+  }
+  document.getElementById('newWatchTip').textContent = '';
   try {
     await fetch('/api/user/watchlist', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ code: code.trim(), name }) });
+      body: JSON.stringify({ code, name: '' }) });
+    hideAddWatchForm();
     await loadWatchlistFromServer();
-  } catch(e) { alert('添加失败: ' + e.message); }
+  } catch(e) { document.getElementById('newWatchTip').textContent = '添加失败'; }
 }
+async function addToWatchlist() { showAddWatchForm(); }
 
 async function removeWatch(code) {
   try {
