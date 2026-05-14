@@ -70,14 +70,14 @@ class TaskType(str, Enum):
 # 内置路由规则。Key 是 TaskType.value，Value 是 (provider_id, model_name)。
 # None 表示用 Provider 自带的 default_model。
 DEFAULT_ROUTING: dict[str, tuple[str, str | None]] = {
-    TaskType.SIMPLE_QUERY.value:    ("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.ANALYST.value:         ("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.RESEARCHER.value:      ("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.SYNTHESIS.value:       ("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.SOCRATIC.value:        ("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.SUMMARY.value:         ("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.COMPLIANCE_CHECK.value:("internal-xhs", "claude-4.6-sonnet-google"),
-    TaskType.DEFAULT.value:         ("internal-xhs", "claude-4.6-sonnet-google"),
+    TaskType.SIMPLE_QUERY.value:    ("gateway", "claude-4.6-sonnet-google"),
+    TaskType.ANALYST.value:         ("gateway", "claude-4.6-sonnet-google"),
+    TaskType.RESEARCHER.value:      ("gateway", "claude-4.6-sonnet-google"),
+    TaskType.SYNTHESIS.value:       ("gateway", "claude-4.6-sonnet-google"),
+    TaskType.SOCRATIC.value:        ("gateway", "claude-4.6-sonnet-google"),
+    TaskType.SUMMARY.value:         ("gateway", "claude-4.6-sonnet-google"),
+    TaskType.COMPLIANCE_CHECK.value:("gateway", "claude-4.6-sonnet-google"),
+    TaskType.DEFAULT.value:         ("gateway", "claude-4.6-sonnet-google"),
 }
 
 
