@@ -87,6 +87,8 @@ async def lifespan(app: FastAPI):
     from tradenest.db.store import init_db
     from tradenest.api.routes.settings import load_db_settings_to_env
     load_db_settings_to_env()  # DB 配置覆盖 .env，优先级更高
+    from tradenest.api.routes.portfolio import init_portfolio_tables
+    init_portfolio_tables()  # 初始化持仓表
     from tradenest.api.routes.user import init_user_tables
     init_db()
     init_user_tables()
@@ -138,6 +140,9 @@ app.include_router(settings_routes.router)
 
 from tradenest.api.routes import feed as feed_routes  # noqa: E402
 app.include_router(feed_routes.router)
+
+from tradenest.api.routes import portfolio as portfolio_routes  # noqa: E402
+app.include_router(portfolio_routes.router)
 
 # 静态文件（网页端）
 if _STATIC_DIR.exists():
