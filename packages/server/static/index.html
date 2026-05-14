@@ -1383,7 +1383,16 @@ body.light {
     $('#btn-send').disabled = true;
 
     const cont = $('#messages');
-    const lastBubble = cont.querySelector('.message.assistant:last-child .message-bubble');
+    // 选最后一个 assistant 消息的 bubble（更稳健：直接用 array.last 而非 :last-child）
+    const allAssistant = cont.querySelectorAll('.message.assistant');
+    const lastAssistantEl = allAssistant[allAssistant.length - 1];
+    const lastBubble = lastAssistantEl ? lastAssistantEl.querySelector('.message-bubble') : null;
+    if (!lastBubble) {
+      console.error('[sendMessage] no lastBubble found');
+      state.streaming = false;
+      $('#btn-send').disabled = false;
+      return;
+    }
 
     let buffer = '';
     const toolCallEls = {};
@@ -1966,15 +1975,32 @@ body.light {
     }
   }
   function renderKLine(d, code) {
-    const candles = d.candles || d.kline || d.items || d || [];
-    if (!Array.isArray(candles) || !candles.length) {
+    // 后端返回格式：{ dates, ohlcv: [[o,c,l,h]...], volumes, ma: {ma5,ma10,ma20,ma60} }
+    // 也兼容旧格式 candles
+    let dates, data, vols, maData = null;
+    if (Array.isArray(d.dates) && Array.isArray(d.ohlcv)) {
+      dates = d.dates;
+      data = d.ohlcv;  // 已经是 [open, close, low, high]
+      vols = d.volumes || [];
+      maData = d.ma || null;
+    } else {
+      const candles = d.candles || d.kline || d.items || [];
+      if (!Array.isArray(candles) || !candles.length) {
+        state.klineChart.setOption({ title: { text: '无数据', left: 'center', textStyle: { color: '#8b949e' } } }, true);
+        return;
+      }
+      dates = candles.map(c => c.date || c.time || c[0]);
+      data = candles.map(c => Array.isArray(c) ? [c[1],c[2],c[3],c[4]] : [Number(c.open),Number(c.close),Number(c.low),Number(c.high)]);
+      vols = candles.map(c => Array.isArray(c) ? c[5] : Number(c.volume || 0));
+    }
+    if (!dates || !dates.length || !data.length) {
       state.klineChart.setOption({ title: { text: '无数据', left: 'center', textStyle: { color: '#8b949e' } } }, true);
       return;
     }
-    const dates = candles.map(c => c.date || c.time || c[0]);
-    const data = candles.map(c => Array.isArray(c) ? [c[1],c[2],c[3],c[4]] : [Number(c.open),Number(c.close),Number(c.low),Number(c.high)]);
-    const vols = candles.map(c => Array.isArray(c) ? c[5] : Number(c.volume || 0));
     const ma = (n) => {
+      // 优先使用后端 ma 字段
+      const key = 'ma' + n;
+      if (maData && Array.isArray(maData[key])) return maData[key].map(v => (v == null ? '-' : v));
       const out = [];
       for (let i=0;i<data.length;i++) {
         if (i<n-1) out.push('-');
