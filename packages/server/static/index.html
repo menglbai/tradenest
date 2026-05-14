@@ -295,7 +295,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
     <div class="app-name">TradeNest</div>
     <div class="app-ver">v0.0.1</div>
   </div>
-  <div class="topbar-right">
+  <div class="topbar-right" style="display:flex;align-items:center;gap:12px">
+    <!-- 角色切换 -->
+    <select id="roleSelect" onchange="switchRole(this.value)" style="background:#2a2a2a;color:#ccc;border:1px solid #444;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer">
+      <option value="general">🔍 通用研究员</option>
+      <option value="fundamentals">📊 基本面分析师</option>
+      <option value="socratic">🤔 苏格拉底模式</option>
+    </select>
     <div class="status-pill">
       <div class="status-dot" id="statusDot"></div>
       <span id="statusTxt">连接中</span>
@@ -364,6 +370,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   <div class="right-panel">
     <div class="panel-tab-bar">
       <div class="panel-tab active" data-tab="watchlist" onclick="switchTab(this)">自选股</div>
+      <div class="panel-tab" data-tab="alerts" onclick="switchTab(this)">预警 <span id="alertBadge" style="display:none;background:#f55;color:#fff;border-radius:8px;padding:0 5px;font-size:11px">0</span></div>
       <div class="panel-tab" data-tab="news" onclick="switchTab(this)">快讯</div>
       <div class="panel-tab" data-tab="global" onclick="switchTab(this)">外盘</div>
       <div class="panel-tab" data-tab="kline" onclick="switchTab(this)">K线</div>
@@ -374,6 +381,11 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
         <div id="watchlistCards"></div>
         <button class="add-watch-btn" onclick="addToWatchlist()">＋ 添加自选股</button>
         <div class="panel-empty" id="watchEmpty" style="display:none">暂无自选股<br><small>点击上方添加</small></div>
+      </div>
+      <!-- 预警 -->
+      <div id="tab-alerts" style="display:none">
+        <div id="alertList"><div class="panel-empty">暂无预警</div></div>
+        <button class="add-watch-btn" onclick="addAlert()" style="margin-top:8px">＋ 新建价格预警</button>
       </div>
       <!-- 快讯 -->
       <div id="tab-news" style="display:none">
@@ -414,7 +426,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 let sessions = [];         // [{id, name, history:[]}]  内存缓存
 let curSid = null;         // 当前 session id
 let isLoading = false;
-let watchlist = JSON.parse(localStorage.getItem('tn_watchlist') || '["600519","000858","300750"]');
+let watchlist = [];  // 自选股列表（从后端加载）
+let currentRole = 'general';
 
 // ════════════════════════════════════════
 //  初始化
@@ -424,9 +437,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (sessions.length === 0) await newSession(true);  // 没有则新建
   checkHealth();
   loadMarketBar();
-  loadWatchlistCards();
+  await loadWatchlistFromServer();  // 自选股从后端加载
+  await loadRoleFromServer();       // 角色从后端加载
+  await loadAlertsFromServer();     // 预警列表
   setInterval(checkHealth, 30000);
   setInterval(loadMarketBar, 60000);
+  setInterval(loadWatchlistCards, 30000);  // 自选股行情 30s 刷新
+  setInterval(checkAlertsTrigger, 60000); // 预警轮询 60s
   document.getElementById('inputBox').focus();
 });
 
@@ -966,20 +983,134 @@ async function fetchWatchlistQuotes() {
   } catch(e) {}
 }
 
-function addToWatchlist() {
-  const code = prompt('输入股票代码（如 600519）：');
-  if (!code || !/^\d{6}$/.test(code.trim())) { alert('请输入6位股票代码'); return; }
-  if (!watchlist.includes(code.trim())) {
-    watchlist.push(code.trim());
-    localStorage.setItem('tn_watchlist', JSON.stringify(watchlist));
+// 自选股后端 API
+async function loadWatchlistFromServer() {
+  try {
+    const r = await fetch('/api/user/watchlist');
+    const d = await r.json();
+    watchlist = d.watchlist.map(w => w.code);
     loadWatchlistCards();
-  }
+  } catch(e) { console.warn('watchlist load failed', e); }
 }
 
-function removeWatch(code) {
-  watchlist = watchlist.filter(c => c !== code);
-  localStorage.setItem('tn_watchlist', JSON.stringify(watchlist));
-  loadWatchlistCards();
+async function addToWatchlist() {
+  const code = prompt('输入股票代码（如 600519）：');
+  if (!code || !/^\d{6}$/.test(code.trim())) { alert('请输入6位股票代码'); return; }
+  const name = prompt('股票名称（可留空）：') || '';
+  try {
+    await fetch('/api/user/watchlist', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code: code.trim(), name }) });
+    await loadWatchlistFromServer();
+  } catch(e) { alert('添加失败: ' + e.message); }
+}
+
+async function removeWatch(code) {
+  try {
+    await fetch('/api/user/watchlist/' + code, { method:'DELETE' });
+    watchlist = watchlist.filter(c => c !== code);
+    loadWatchlistCards();
+  } catch(e) { console.warn('remove watchlist failed', e); }
+}
+
+// 角色切换
+async function loadRoleFromServer() {
+  try {
+    const r = await fetch('/api/user/role');
+    const d = await r.json();
+    currentRole = d.role;
+    const sel = document.getElementById('roleSelect');
+    if (sel) sel.value = currentRole;
+  } catch(e) {}
+}
+
+async function switchRole(role) {
+  try {
+    await fetch('/api/user/role', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ role }) });
+    currentRole = role;
+    const names = { general:'🔍 通用研究员', fundamentals:'📊 基本面分析师', socratic:'🤔 苏格拉底模式' };
+    appendSystemMsg('已切换为：' + (names[role] || role));
+  } catch(e) { console.warn('switch role failed', e); }
+}
+
+function appendSystemMsg(text) {
+  const el = document.getElementById('messages');
+  if (!el) return;
+  const div = document.createElement('div');
+  div.style.cssText = 'text-align:center;color:#666;font-size:12px;margin:8px 0;';
+  div.textContent = text;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// 预警
+async function loadAlertsFromServer() {
+  try {
+    const r = await fetch('/api/user/alerts');
+    const d = await r.json();
+    renderAlerts(d.alerts);
+  } catch(e) {}
+}
+
+function renderAlerts(alerts) {
+  const el = document.getElementById('alertList');
+  if (!el) return;
+  const active = alerts.filter(a => !a.triggered);
+  const done   = alerts.filter(a => a.triggered);
+  if (alerts.length === 0) {
+    el.innerHTML = '<div class="panel-empty">暂无预警，点击下方新建</div>';
+    return;
+  }
+  el.innerHTML = [...active, ...done].map(a => {
+    const dir = a.direction === 'above' ? '突破上' : '跌破';
+    const color = a.triggered ? '#555' : (a.direction === 'above' ? '#4caf50' : '#f55');
+    const tick = a.triggered ? '✅' : '⏰';
+    return `<div style="padding:8px;border-left:3px solid ${color};margin:6px 0;background:#1e1e1e;border-radius:0 6px 6px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:600">${tick} ${a.name||a.code}(${a.code})</span>
+        ${!a.triggered ? `<span onclick="deleteAlert(${a.id})" style="cursor:pointer;color:#666;font-size:16px">×</span>` : ''}
+      </div>
+      <div style="font-size:12px;color:#999;margin-top:2px">${dir} ¥${a.target} ${a.note ? '· '+a.note : ''}</div>
+      ${a.triggered ? '<div style="font-size:11px;color:#4caf50">已触发</div>' : ''}
+    </div>`;
+  }).join('');
+}
+
+async function addAlert() {
+  const code = prompt('股票代码（如 600519）：'); if (!code) return;
+  const name = prompt('股票名称（可留空）：') || '';
+  const dirStr = prompt('方向：输入 above（突破）或 below（跌破）：');
+  if (!['above','below'].includes(dirStr)) { alert('方向输入错误'); return; }
+  const target = parseFloat(prompt('目标价格：')); if (!target || target<=0) { alert('价格无效'); return; }
+  const note = prompt('备注（可留空）：') || '';
+  try {
+    await fetch('/api/user/alerts', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code, name, direction: dirStr, target, note }) });
+    await loadAlertsFromServer();
+  } catch(e) { alert('创建失败: ' + e.message); }
+}
+
+async function deleteAlert(id) {
+  await fetch('/api/user/alerts/' + id, { method:'DELETE' });
+  await loadAlertsFromServer();
+}
+
+async function checkAlertsTrigger() {
+  try {
+    const r = await fetch('/api/user/alerts/check');
+    const d = await r.json();
+    if (d.triggered && d.triggered.length > 0) {
+      d.triggered.forEach(t => {
+        if (Notification.permission === 'granted') {
+          new Notification('🚨 TradeNest 预警触发', { body: t.message });
+        }
+        appendSystemMsg('⚠️ ' + t.message);
+      });
+      await loadAlertsFromServer();
+      const badge = document.getElementById('alertBadge');
+      if (badge) { badge.style.display='inline'; badge.textContent=d.triggered.length; }
+    }
+  } catch(e) {}
 }
 
 // 快讯
