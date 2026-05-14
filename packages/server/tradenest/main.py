@@ -47,6 +47,7 @@ from tradenest.api.routes import chat as chat_routes
 from tradenest.api.routes import system as system_routes
 from tradenest.api.routes import market as market_routes
 from tradenest.api.routes import sessions as sessions_routes
+from tradenest.api.routes import tools as tools_routes
 
 # 静态文件目录
 _STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -118,6 +119,7 @@ app.include_router(chat_routes.router)
 app.include_router(system_routes.router)
 app.include_router(market_routes.router)
 app.include_router(sessions_routes.router)
+app.include_router(tools_routes.router)
 
 # 静态文件（网页端）
 if _STATIC_DIR.exists():
