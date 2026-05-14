@@ -25,7 +25,8 @@ router = APIRouter(prefix="/api/chart", tags=["chart"])
 @router.get("/kline")
 async def kline(
     code: str = Query(..., description="股票代码，如 600519"),
-    days: int = Query(default=60, ge=5, le=365, description="天数"),
+    days: int = Query(default=120, ge=5, le=2000, description="点数（根据 period 涵义不同：日/周/月）"),
+    period: str = Query(default="daily", description="周期：daily日/weekly周/monthly月"),
     adjust: str = Query(default="qfq", description="复权方式：qfq前复权/hfq后复权/空不复权"),
 ):
     """
@@ -43,10 +44,10 @@ async def kline(
     }
     """
     import asyncio
-    return await asyncio.get_event_loop().run_in_executor(None, _fetch_kline, code, days, adjust)
+    return await asyncio.get_event_loop().run_in_executor(None, _fetch_kline, code, days, adjust, period)
 
 
-def _fetch_kline(code: str, days: int, adjust: str) -> dict:
+def _fetch_kline(code: str, days: int, adjust: str, period: str = "daily") -> dict:
     """同步拉 K 线数据（在线程池中执行，不阻塞事件循环）。"""
     import datetime
     try:
@@ -54,11 +55,17 @@ def _fetch_kline(code: str, days: int, adjust: str) -> dict:
         import pandas as pd
 
         end = datetime.date.today()
-        start = end - datetime.timedelta(days=days + 30)  # 多拉一些，算均线用
+        # 根据周期倒推起始时间：月线拉 days*40，周线拉 days*8，日线拉 days+60
+        if period == "monthly":
+            start = end - datetime.timedelta(days=days * 35 + 200)
+        elif period == "weekly":
+            start = end - datetime.timedelta(days=days * 8 + 100)
+        else:
+            start = end - datetime.timedelta(days=days + 80)
 
         df = ak.stock_zh_a_hist(
             symbol=code,
-            period="daily",
+            period=period if period in ("daily", "weekly", "monthly") else "daily",
             start_date=start.strftime("%Y%m%d"),
             end_date=end.strftime("%Y%m%d"),
             adjust=adjust if adjust else "",
@@ -96,6 +103,7 @@ def _fetch_kline(code: str, days: int, adjust: str) -> dict:
             "code": code,
             "name": name,
             "days": len(dates),
+            "period": period,
             "adjust": adjust,
             "dates": dates,
             "ohlcv": ohlcv,
@@ -167,7 +175,7 @@ def _mock_kline(code: str, days: int, reason: str = "") -> dict:
     }
     return {
         "code": code, "name": f"{code}(mock)", "days": len(dates),
-        "adjust": "mock", "dates": dates, "ohlcv": ohlcv,
+        "period": "daily", "adjust": "mock", "dates": dates, "ohlcv": ohlcv,
         "volumes": volumes, "pct_change": [0]*len(dates), "ma": ma,
         "_mock": True, "_reason": reason,
     }
