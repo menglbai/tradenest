@@ -6,596 +6,893 @@
 <title>TradeNest — AI 投资研究助手</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #22263a;
-    --border: #2e3348;
-    --accent: #4f8ef7;
-    --accent2: #7c5cfc;
-    --green: #22c55e;
-    --red: #ef4444;
-    --yellow: #f59e0b;
-    --text: #e2e8f0;
-    --text2: #94a3b8;
-    --text3: #64748b;
-    --user-bubble: #1e3a5f;
-    --ai-bubble: #1a1d27;
-    --tool-bg: #0f1923;
-    --radius: 12px;
-    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  }
+:root {
+  --bg:        #0d0f18;
+  --sidebar:   #111420;
+  --surface:   #171b2e;
+  --surface2:  #1e2340;
+  --border:    #252d4a;
+  --accent:    #4f8ef7;
+  --accent2:   #7c5cfc;
+  --green:     #22c55e;
+  --red:       #ef4444;
+  --yellow:    #f59e0b;
+  --orange:    #f97316;
+  --text:      #e2e8f0;
+  --text2:     #94a3b8;
+  --text3:     #4b5a7a;
+  --r:         10px;
+  --font:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono:      'JetBrains Mono', 'Fira Code', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+/* ───────────── TOP BAR ───────────── */
+.topbar {
+  height: 48px; display: flex; align-items: center; gap: 10px;
+  padding: 0 16px; background: var(--sidebar);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; z-index: 10;
+}
+.logo { font-size: 20px; }
+.app-name { font-weight: 700; font-size: 15px; }
+.app-ver  { font-size: 11px; color: var(--text3); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.status-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  background: var(--surface2); font-size: 11px; color: var(--text2);
+}
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.status-dot.err { background: var(--red); }
 
-  body {
-    font-family: var(--font);
-    background: var(--bg);
-    color: var(--text);
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+/* ───────────── LAYOUT ───────────── */
+.layout { display: flex; flex: 1; overflow: hidden; }
 
-  /* ── Header ── */
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .logo { font-size: 22px; }
-  .title { font-size: 16px; font-weight: 700; color: var(--text); }
-  .subtitle { font-size: 12px; color: var(--text3); }
-  .status-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--green);
-    margin-left: auto;
-    box-shadow: 0 0 6px var(--green);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-  .clear-btn {
-    background: none; border: 1px solid var(--border);
-    color: var(--text2); padding: 5px 12px;
-    border-radius: 6px; cursor: pointer; font-size: 12px;
-    transition: all 0.2s;
-  }
-  .clear-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* ───────────── LEFT SIDEBAR ───────────── */
+.sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-section { padding: 10px 12px 4px; font-size: 10px; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; }
+.session-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+.session-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--text2);
+  margin-bottom: 2px; transition: all 0.15s;
+}
+.session-item:hover { background: var(--surface2); color: var(--text); }
+.session-item.active { background: var(--surface2); color: var(--accent); }
+.session-item .si-icon { font-size: 14px; flex-shrink: 0; }
+.session-item .si-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-item .si-del { opacity: 0; font-size: 12px; color: var(--text3); cursor: pointer; }
+.session-item:hover .si-del { opacity: 1; }
+.new-session-btn {
+  margin: 8px; padding: 8px; border-radius: 8px;
+  border: 1px dashed var(--border); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; color: var(--text3); font-size: 13px;
+  transition: all 0.15s; background: none;
+}
+.new-session-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* ── Chat area ── */
-  .chat-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px 0;
-    scroll-behavior: smooth;
-  }
-  .chat-area::-webkit-scrollbar { width: 4px; }
-  .chat-area::-webkit-scrollbar-track { background: transparent; }
-  .chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* 侧边栏底部 - 快捷工具 */
+.sidebar-tools { border-top: 1px solid var(--border); padding: 8px; }
+.tool-btn {
+  width: 100%; padding: 7px 10px; border-radius: 7px;
+  border: none; cursor: pointer; background: none;
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text2); font-size: 12px; text-align: left;
+  transition: all 0.15s;
+}
+.tool-btn:hover { background: var(--surface2); color: var(--text); }
 
-  .message-wrap {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 0 20px;
-  }
+/* ───────────── MAIN AREA ───────────── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-  /* ── Message bubble ── */
-  .message {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 20px;
-    animation: fadeIn 0.2s ease;
-  }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* ───────────── MARKET BAR ───────────── */
+.market-bar {
+  height: 36px; display: flex; align-items: center;
+  padding: 0 16px; gap: 20px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; overflow-x: auto;
+}
+.market-bar::-webkit-scrollbar { display: none; }
+.mkt-item {
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap; font-size: 12px;
+}
+.mkt-name { color: var(--text3); }
+.mkt-price { color: var(--text); font-weight: 600; font-family: var(--mono); }
+.mkt-chg { font-family: var(--mono); font-size: 11px; }
+.mkt-chg.up { color: var(--green); }
+.mkt-chg.down { color: var(--red); }
+.mkt-sep { color: var(--border); }
+.mkt-loading { color: var(--text3); font-size: 12px; }
+.mkt-refresh { margin-left: auto; background: none; border: none; color: var(--text3); cursor: pointer; font-size: 13px; flex-shrink: 0; }
+.mkt-refresh:hover { color: var(--accent); }
 
-  .message.user { flex-direction: row-reverse; }
+/* ───────────── CHAT AREA ───────────── */
+.chat-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.chat-msgs {
+  flex: 1; overflow-y: auto; padding: 20px 0;
+  scroll-behavior: smooth;
+}
+.chat-msgs::-webkit-scrollbar { width: 4px; }
+.chat-msgs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  .avatar {
-    width: 36px; height: 36px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px; flex-shrink: 0;
-    background: var(--surface2);
-  }
-  .message.user .avatar { background: var(--user-bubble); }
+.msg-row { max-width: 800px; margin: 0 auto; padding: 0 20px 16px; display: flex; gap: 10px; }
+.msg-row.user { flex-direction: row-reverse; }
 
-  .bubble {
-    max-width: 75%;
-    padding: 12px 16px;
-    border-radius: var(--radius);
-    font-size: 14px;
-    line-height: 1.7;
-    background: var(--ai-bubble);
-    border: 1px solid var(--border);
-    word-break: break-word;
-  }
-  .message.user .bubble {
-    background: var(--user-bubble);
-    border-color: #1e4a8a;
-    color: #c8dcf8;
-  }
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0; background: var(--surface2);
+}
+.msg-row.user .avatar { background: #1e3560; }
 
-  /* Markdown inside bubble */
-  .bubble h1, .bubble h2, .bubble h3 {
-    margin: 12px 0 6px; font-size: 15px; color: var(--accent);
-  }
-  .bubble p { margin: 6px 0; }
-  .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
-  .bubble li { margin: 3px 0; }
-  .bubble code {
-    background: var(--tool-bg); padding: 2px 6px;
-    border-radius: 4px; font-family: monospace; font-size: 13px;
-    color: #7dd3fc;
-  }
-  .bubble pre {
-    background: var(--tool-bg); padding: 12px;
-    border-radius: 8px; overflow-x: auto; margin: 8px 0;
-  }
-  .bubble pre code { background: none; padding: 0; }
-  .bubble table {
-    border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px;
-  }
-  .bubble th, .bubble td {
-    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
-  }
-  .bubble th { background: var(--surface2); color: var(--accent); }
-  .bubble tr:hover { background: var(--surface2); }
-  .bubble strong { color: #93c5fd; }
-  .bubble em { color: var(--yellow); }
-  .bubble blockquote {
-    border-left: 3px solid var(--accent2);
-    padding: 4px 12px; margin: 8px 0;
-    color: var(--text2); font-style: italic;
-  }
+.msg-body { max-width: 78%; display: flex; flex-direction: column; gap: 4px; }
 
-  /* ── Tool call indicator ── */
-  .tool-call {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: var(--tool-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin: 6px 0;
-    font-size: 12px;
-    color: var(--text3);
-  }
-  .tool-call .tool-icon { color: var(--yellow); font-size: 14px; }
-  .tool-call.done { color: var(--text2); }
-  .tool-call.done .tool-icon { color: var(--green); }
+.bubble {
+  padding: 10px 14px; border-radius: var(--r);
+  font-size: 14px; line-height: 1.7;
+  background: var(--surface); border: 1px solid var(--border);
+  word-break: break-word;
+}
+.msg-row.user .bubble { background: #1a3060; border-color: #1e4080; color: #c8dcf8; }
 
-  /* ── Meta info ── */
-  .meta {
-    display: flex;
-    gap: 12px;
-    margin-top: 8px;
-    font-size: 11px;
-    color: var(--text3);
-    flex-wrap: wrap;
-  }
-  .meta span { display: flex; align-items: center; gap: 3px; }
+/* Markdown */
+.bubble h1,.bubble h2,.bubble h3 { font-size: 14px; color: var(--accent); margin: 10px 0 4px; }
+.bubble p { margin: 4px 0; }
+.bubble ul,.bubble ol { padding-left: 18px; margin: 4px 0; }
+.bubble li { margin: 2px 0; }
+.bubble code { background: #0d1525; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 12px; color: #7dd3fc; }
+.bubble pre { background: #0d1525; padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 6px 0; }
+.bubble pre code { background: none; padding: 0; }
+.bubble table { border-collapse: collapse; width: 100%; margin: 6px 0; font-size: 13px; }
+.bubble th,.bubble td { border: 1px solid var(--border); padding: 5px 9px; }
+.bubble th { background: var(--surface2); color: var(--accent); }
+.bubble strong { color: #93c5fd; }
+.bubble blockquote { border-left: 3px solid var(--accent2); padding: 2px 10px; margin: 6px 0; color: var(--text2); }
+.bubble a { color: var(--accent); }
 
-  /* ── Thinking indicator ── */
-  .thinking {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    color: var(--text3);
-    font-size: 13px;
-  }
-  .dots span {
-    display: inline-block;
-    width: 5px; height: 5px;
-    background: var(--accent);
-    border-radius: 50%;
-    animation: bounce 1.2s infinite;
-    margin: 0 1px;
-  }
-  .dots span:nth-child(2) { animation-delay: 0.2s; }
-  .dots span:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); opacity: 0.4; }
-    50% { transform: translateY(-4px); opacity: 1; }
-  }
+/* Tool calls */
+.tool-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 5px; font-size: 11px;
+  background: #0d1a2e; border: 1px solid var(--border);
+  color: var(--text3); margin: 3px 0;
+}
+.tool-tag.done { color: var(--green); border-color: #1a3a1a; }
+.tool-tag.err  { color: var(--red);   border-color: #3a1a1a; }
 
-  /* ── Input area ── */
-  .input-area {
-    padding: 16px 20px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .input-wrap {
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
-  }
-  textarea {
-    flex: 1;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 11px 14px;
-    border-radius: var(--radius);
-    font-size: 14px;
-    font-family: var(--font);
-    resize: none;
-    outline: none;
-    line-height: 1.5;
-    max-height: 160px;
-    transition: border-color 0.2s;
-  }
-  textarea:focus { border-color: var(--accent); }
-  textarea::placeholder { color: var(--text3); }
+/* Meta */
+.msg-meta { display: flex; gap: 10px; font-size: 11px; color: var(--text3); padding: 0 2px; }
 
-  .send-btn {
-    width: 42px; height: 42px;
-    background: var(--accent);
-    border: none; border-radius: 10px;
-    color: white; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-  .send-btn:hover { background: #3b7de8; transform: scale(1.05); }
-  .send-btn:disabled { background: var(--border); cursor: not-allowed; transform: none; }
+/* Thinking */
+.thinking-dots { display: flex; align-items: center; gap: 4px; padding: 4px 0; }
+.thinking-dots span {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+  animation: bounce 1.2s infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: .2s; }
+.thinking-dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-4px);opacity:1} }
 
-  .hint { font-size: 11px; color: var(--text3); margin-top: 6px; text-align: center; }
+/* ───────────── INPUT BAR ───────────── */
+.input-bar {
+  border-top: 1px solid var(--border);
+  background: var(--surface); padding: 12px 16px;
+  flex-shrink: 0;
+}
+.input-row { max-width: 800px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+.input-box {
+  flex: 1; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: var(--r);
+  color: var(--text); padding: 9px 12px;
+  font-size: 14px; font-family: var(--font);
+  resize: none; outline: none; line-height: 1.5; max-height: 160px;
+  transition: border-color .2s;
+}
+.input-box:focus { border-color: var(--accent); }
+.input-box::placeholder { color: var(--text3); }
+.send-btn {
+  width: 38px; height: 38px; border-radius: 9px;
+  background: var(--accent); border: none; color: white;
+  cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  transition: all .2s; flex-shrink: 0;
+}
+.send-btn:hover:not(:disabled) { background: #3b7de8; }
+.send-btn:disabled { background: var(--border); cursor: not-allowed; }
+.input-hint { max-width: 800px; margin: 5px auto 0; font-size: 11px; color: var(--text3); }
 
-  /* ── Empty state ── */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 12px;
-    color: var(--text3);
-    padding: 40px;
-    text-align: center;
-  }
-  .empty-state .big-icon { font-size: 48px; }
-  .empty-state h2 { font-size: 18px; color: var(--text2); }
-  .empty-state p { font-size: 13px; line-height: 1.6; }
-  .suggestions {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    justify-content: center; margin-top: 12px;
-  }
-  .suggestion {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    padding: 8px 14px; border-radius: 20px;
-    font-size: 13px; cursor: pointer; color: var(--text2);
-    transition: all 0.2s;
-  }
-  .suggestion:hover { border-color: var(--accent); color: var(--accent); }
+/* ───────────── EMPTY STATE ───────────── */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px; padding: 40px; text-align: center;
+}
+.empty-icon { font-size: 44px; }
+.empty-state h2 { font-size: 17px; color: var(--text2); }
+.empty-state p { font-size: 13px; color: var(--text3); line-height: 1.6; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-top: 12px; max-width: 600px; }
+.sug-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 6px 13px; border-radius: 20px;
+  font-size: 12px; cursor: pointer; color: var(--text2);
+  transition: all .15s;
+}
+.sug-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ───────────── RIGHT PANEL (可折叠) ───────────── */
+.right-panel {
+  width: 280px; flex-shrink: 0;
+  background: var(--sidebar); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-tab-bar {
+  display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-tab {
+  flex: 1; padding: 9px 4px; font-size: 11px; text-align: center;
+  color: var(--text3); cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all .15s;
+}
+.panel-tab.active { color: var(--accent); border-color: var(--accent); }
+.panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+.panel-body::-webkit-scrollbar { width: 3px; }
+.panel-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* 行情卡片 */
+.quote-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+}
+.qc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.qc-name { font-size: 13px; font-weight: 600; }
+.qc-code { font-size: 10px; color: var(--text3); }
+.qc-price { font-size: 18px; font-weight: 700; font-family: var(--mono); }
+.qc-chg { font-size: 12px; font-family: var(--mono); margin-top: 2px; }
+.qc-chg.up { color: var(--green); }
+.qc-chg.down { color: var(--red); }
+.qc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 8px; font-size: 11px; }
+.qc-label { color: var(--text3); }
+.qc-val { color: var(--text2); font-family: var(--mono); }
+.add-watch-btn {
+  width: 100%; margin-top: 8px; padding: 8px;
+  background: none; border: 1px dashed var(--border);
+  border-radius: 7px; color: var(--text3); cursor: pointer;
+  font-size: 12px; transition: all .15s;
+}
+.add-watch-btn:hover { border-color: var(--accent); color: var(--accent); }
+.panel-empty { color: var(--text3); font-size: 12px; text-align: center; padding: 20px 0; }
+
+/* 新闻列表 */
+.news-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.news-item:last-child { border-bottom: none; }
+.news-time { font-size: 10px; color: var(--text3); margin-bottom: 3px; }
+.news-title { font-size: 12px; color: var(--text2); line-height: 1.5; cursor: pointer; }
+.news-title:hover { color: var(--accent); }
+.news-src { display: inline-block; font-size: 10px; color: var(--text3); background: var(--surface2); padding: 1px 5px; border-radius: 3px; margin-top: 3px; }
+
+/* ───────────── ANIMATIONS ───────────── */
+@keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+.msg-row { animation: fadeUp .18s ease; }
 </style>
 </head>
 <body>
 
-<div class="header">
+<!-- TOP BAR -->
+<div class="topbar">
   <div class="logo">🪺</div>
   <div>
-    <div class="title">TradeNest</div>
-    <div class="subtitle">AI 投资研究助手</div>
+    <div class="app-name">TradeNest</div>
+    <div class="app-ver">v0.0.1</div>
   </div>
-  <button class="clear-btn" onclick="clearChat()">清空对话</button>
-  <div class="status-dot" id="statusDot" title="已连接"></div>
-</div>
-
-<div class="chat-area" id="chatArea">
-  <div class="message-wrap" id="messageWrap">
-    <div class="empty-state" id="emptyState">
-      <div class="big-icon">📊</div>
-      <h2>你好！我是 TradeNest</h2>
-      <p>你的 AI 投资研究助手<br>可以帮你分析行情、查资金流向、看宏观新闻</p>
-      <div class="suggestions">
-        <div class="suggestion" onclick="quickAsk(this)">贵州茅台今天怎么样？</div>
-        <div class="suggestion" onclick="quickAsk(this)">帮我看看外盘行情</div>
-        <div class="suggestion" onclick="quickAsk(this)">今天有什么重要政策新闻？</div>
-        <div class="suggestion" onclick="quickAsk(this)">宁德时代最近一个月走势</div>
-        <div class="suggestion" onclick="quickAsk(this)">现在A股整体资金面怎样？</div>
-      </div>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusTxt">连接中</span>
     </div>
   </div>
 </div>
 
-<div class="input-area">
-  <div class="input-wrap">
-    <textarea id="input" placeholder="问我任何关于股票的问题… (Shift+Enter 换行，Enter 发送)" rows="1"
-      onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">➤</button>
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT SIDEBAR: 会话列表 -->
+  <div class="sidebar">
+    <div class="sidebar-section">会话</div>
+    <button class="new-session-btn" onclick="newSession()">＋ 新建对话</button>
+    <div class="session-list" id="sessionList"></div>
+
+    <div class="sidebar-tools">
+      <button class="tool-btn" onclick="quickTool('market')">📊 市场行情速览</button>
+      <button class="tool-btn" onclick="quickTool('news')">📰 宏观新闻</button>
+      <button class="tool-btn" onclick="quickTool('flow')">💰 资金流向</button>
+      <button class="tool-btn" onclick="clearCurrentSession()">🗑 清空当前对话</button>
+    </div>
   </div>
-  <div class="hint">支持多轮对话 · 实时行情数据 · AI 综合分析</div>
-</div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- MARKET BAR -->
+    <div class="market-bar">
+      <div class="mkt-loading" id="mktBar">行情加载中…</div>
+      <button class="mkt-refresh" onclick="loadMarketBar()" title="刷新行情">↻</button>
+    </div>
+
+    <!-- CHAT WRAP -->
+    <div class="chat-wrap">
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📈</div>
+          <h2>你好，我是 TradeNest</h2>
+          <p>你的 AI 投资研究助手<br>实时行情 · 资金流向 · 宏观分析 · 多轮对话</p>
+          <div class="suggestions">
+            <div class="sug-chip" onclick="quickAsk(this)">贵州茅台今天怎么样？</div>
+            <div class="sug-chip" onclick="quickAsk(this)">帮我看看外盘行情</div>
+            <div class="sug-chip" onclick="quickAsk(this)">今天有什么重要政策新闻？</div>
+            <div class="sug-chip" onclick="quickAsk(this)">宁德时代最近一个月走势分析</div>
+            <div class="sug-chip" onclick="quickAsk(this)">茅台今日主力资金流向如何？</div>
+            <div class="sug-chip" onclick="quickAsk(this)">对比三大指数与A股的关系</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INPUT BAR -->
+      <div class="input-bar">
+        <div class="input-row">
+          <textarea class="input-box" id="inputBox" rows="1"
+            placeholder="问我任何关于股票的问题… (Enter 发送，Shift+Enter 换行)"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">▶</button>
+        </div>
+        <div class="input-hint">支持多轮对话 · 实时数据 · AI 综合分析</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="panel-tab-bar">
+      <div class="panel-tab active" data-tab="watchlist" onclick="switchTab(this)">自选股</div>
+      <div class="panel-tab" data-tab="news" onclick="switchTab(this)">快讯</div>
+      <div class="panel-tab" data-tab="global" onclick="switchTab(this)">外盘</div>
+    </div>
+    <div class="panel-body" id="panelBody">
+      <!-- 自选股 -->
+      <div id="tab-watchlist">
+        <div id="watchlistCards"></div>
+        <button class="add-watch-btn" onclick="addToWatchlist()">＋ 添加自选股</button>
+        <div class="panel-empty" id="watchEmpty" style="display:none">暂无自选股<br><small>点击上方添加</small></div>
+      </div>
+      <!-- 快讯 -->
+      <div id="tab-news" style="display:none">
+        <div id="newsPanel"><div class="panel-empty">点击下方加载快讯</div></div>
+        <button class="add-watch-btn" onclick="loadNewsPanel()">↻ 加载最新快讯</button>
+      </div>
+      <!-- 外盘 -->
+      <div id="tab-global" style="display:none">
+        <div id="globalPanel"><div class="panel-empty">点击下方加载外盘</div></div>
+        <button class="add-watch-btn" onclick="loadGlobalPanel()">↻ 加载外盘行情</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /layout -->
 
 <script>
-// ── 状态 ──
-const history = [];   // [{role, content}]
+// ════════════════════════════════════════
+//  状态
+// ════════════════════════════════════════
+let sessions = [];         // [{id, name, history:[]}]
+let curSid = null;         // 当前 session id
 let isLoading = false;
-const BASE = '';      // 同域，相对路径
+let watchlist = JSON.parse(localStorage.getItem('tn_watchlist') || '["600519","000858","300750"]');
 
-// ── 工具函数 ──
-function $(id) { return document.getElementById(id); }
+// ════════════════════════════════════════
+//  初始化
+// ════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  newSession(true);       // 建默认会话
+  checkHealth();
+  loadMarketBar();
+  loadWatchlistCards();
+  setInterval(checkHealth, 30000);
+  setInterval(loadMarketBar, 60000);  // 每分钟刷新行情条
+  document.getElementById('inputBox').focus();
+});
+
+// ════════════════════════════════════════
+//  会话管理
+// ════════════════════════════════════════
+function genId() { return Date.now().toString(36); }
+
+function newSession(silent) {
+  const id = genId();
+  const n = sessions.length + 1;
+  sessions.push({ id, name: `对话 ${n}`, history: [] });
+  switchSession(id);
+  renderSessionList();
+  if (!silent) document.getElementById('inputBox').focus();
+}
+
+function switchSession(id) {
+  curSid = id;
+  renderSessionList();
+  renderCurrentChat();
+}
+
+function deleteSession(id, e) {
+  e.stopPropagation();
+  sessions = sessions.filter(s => s.id !== id);
+  if (curSid === id) {
+    if (sessions.length === 0) newSession(true);
+    else switchSession(sessions[sessions.length-1].id);
+  }
+  renderSessionList();
+}
+
+function curSession() { return sessions.find(s => s.id === curSid); }
+
+function clearCurrentSession() {
+  const s = curSession();
+  if (s) { s.history = []; renderCurrentChat(); }
+}
+
+function renderSessionList() {
+  const el = document.getElementById('sessionList');
+  el.innerHTML = sessions.map(s => `
+    <div class="session-item ${s.id===curSid?'active':''}" onclick="switchSession('${s.id}')">
+      <span class="si-icon">💬</span>
+      <span class="si-name">${esc(s.name)}</span>
+      <span class="si-del" onclick="deleteSession('${s.id}',event)">✕</span>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════
+//  聊天渲染
+// ════════════════════════════════════════
+function renderCurrentChat() {
+  const s = curSession();
+  const container = document.getElementById('chatMsgs');
+  if (!s || s.history.length === 0) {
+    container.innerHTML = `<div class="empty-state" id="emptyState">
+      <div class="empty-icon">📈</div>
+      <h2>开始新的对话</h2>
+      <p>问我任何关于市场的问题</p>
+      <div class="suggestions">
+        <div class="sug-chip" onclick="quickAsk(this)">贵州茅台今天怎么样？</div>
+        <div class="sug-chip" onclick="quickAsk(this)">帮我看看外盘行情</div>
+        <div class="sug-chip" onclick="quickAsk(this)">今天有什么重要政策新闻？</div>
+      </div>
+    </div>`;
+    return;
+  }
+  container.innerHTML = '';
+  s.history.forEach(m => {
+    if (m.role === 'user') appendUserBubble(m.content, false);
+    else appendAiBubble(m.content, [], 0, 0, 0, false);
+  });
+  scrollBottom();
+}
+
+function scrollBottom() {
+  const c = document.getElementById('chatMsgs');
+  c.scrollTop = c.scrollHeight;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function appendUserBubble(text, animate=true) {
+  const c = document.getElementById('chatMsgs');
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+  const el = document.createElement('div');
+  el.className = 'msg-row user';
+  if (!animate) el.style.animation = 'none';
+  el.innerHTML = `<div class="avatar">👤</div><div class="msg-body"><div class="bubble">${esc(text)}</div></div>`;
+  c.appendChild(el);
+  scrollBottom();
+}
+
+function appendAiBubble(text, tools, rounds, durationMs, tokens, animate=true) {
+  const c = document.getElementById('chatMsgs');
+  const el = document.createElement('div');
+  el.className = 'msg-row';
+  if (!animate) el.style.animation = 'none';
+  const bid = 'b' + genId();
+  const mid = 'm' + genId();
+  let toolHtml = tools.map(t =>
+    `<div class="tool-tag done">✅ ${esc(t)}</div>`
+  ).join('');
+  const metaHtml = (rounds > 0)
+    ? `<div class="msg-meta">
+        <span>🔄 ${rounds}轮</span>
+        <span>⏱ ${(durationMs/1000).toFixed(1)}s</span>
+        ${tokens ? `<span>📊 ${tokens}tokens</span>` : ''}
+       </div>`
+    : '';
+  el.innerHTML = `
+    <div class="avatar">🪺</div>
+    <div class="msg-body">
+      <div>${toolHtml}</div>
+      <div class="bubble" id="${bid}">${marked.parse(text)}</div>
+      <div id="${mid}">${metaHtml}</div>
+    </div>`;
+  c.appendChild(el);
+  scrollBottom();
+  return { bid, mid };
+}
+
+function appendThinking() {
+  const c = document.getElementById('chatMsgs');
+  const empty = document.getElementById('emptyState');
+  if (empty) empty.remove();
+  const el = document.createElement('div');
+  el.className = 'msg-row';
+  el.id = 'thinkingRow';
+  el.innerHTML = `<div class="avatar">🪺</div><div class="msg-body"><div class="bubble"><div class="thinking-dots"><span></span><span></span><span></span></div></div></div>`;
+  c.appendChild(el);
+  scrollBottom();
+}
+
+// ════════════════════════════════════════
+//  发送消息
+// ════════════════════════════════════════
+function quickAsk(el) { document.getElementById('inputBox').value = el.textContent; sendMessage(); }
+function quickTool(t) {
+  const msgs = {
+    market: '帮我快速看一下今日A股市场整体行情和主要指数情况',
+    news:   '今天有什么重要的宏观政策和市场新闻？',
+    flow:   '当前市场主力资金流向怎么样？有哪些热点板块？',
+  };
+  document.getElementById('inputBox').value = msgs[t] || '';
+  sendMessage();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
 
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 160) + 'px';
 }
 
-function scrollBottom() {
-  const area = $('chatArea');
-  area.scrollTop = area.scrollHeight;
-}
-
-function hideEmpty() {
-  const e = $('emptyState');
-  if (e) e.style.display = 'none';
-}
-
-function quickAsk(el) {
-  $('input').value = el.textContent;
-  sendMessage();
-}
-
-function clearChat() {
-  history.length = 0;
-  const wrap = $('messageWrap');
-  wrap.innerHTML = `<div class="empty-state" id="emptyState">
-    <div class="big-icon">📊</div>
-    <h2>对话已清空</h2>
-    <p>开始新的对话吧</p>
-  </div>`;
-}
-
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-}
-
 function setLoading(v) {
   isLoading = v;
-  $('sendBtn').disabled = v;
-  $('input').disabled = v;
+  document.getElementById('sendBtn').disabled = v;
+  document.getElementById('inputBox').disabled = v;
 }
 
-// ── 添加消息 ──
-function addUserMessage(text) {
-  hideEmpty();
-  const wrap = $('messageWrap');
-  const el = document.createElement('div');
-  el.className = 'message user';
-  el.innerHTML = `
-    <div class="avatar">👤</div>
-    <div class="bubble">${escapeHtml(text)}</div>
-  `;
-  wrap.appendChild(el);
-  scrollBottom();
-}
-
-function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function addThinking() {
-  hideEmpty();
-  const wrap = $('messageWrap');
-  const el = document.createElement('div');
-  el.className = 'message';
-  el.id = 'thinkingMsg';
-  el.innerHTML = `
-    <div class="avatar">🪺</div>
-    <div class="bubble">
-      <div class="thinking">
-        思考中 <div class="dots"><span></span><span></span><span></span></div>
-      </div>
-    </div>
-  `;
-  wrap.appendChild(el);
-  scrollBottom();
-  return el;
-}
-
-function removeThinking() {
-  const el = $('thinkingMsg');
-  if (el) el.remove();
-}
-
-function addAiMessage() {
-  hideEmpty();
-  const wrap = $('messageWrap');
-  const el = document.createElement('div');
-  el.className = 'message';
-  const bubbleId = 'bubble_' + Date.now();
-  el.innerHTML = `
-    <div class="avatar">🪺</div>
-    <div>
-      <div class="bubble" id="${bubbleId}"></div>
-      <div class="meta" id="meta_${bubbleId}"></div>
-    </div>
-  `;
-  wrap.appendChild(el);
-  return { el, bubbleId };
-}
-
-function addToolCall(bubbleId, toolName, done=false) {
-  const bubble = $(bubbleId);
-  if (!bubble) return;
-  const id = 'tool_' + toolName.replace(/\W/g,'_') + '_' + Date.now();
-  const div = document.createElement('div');
-  div.className = 'tool-call' + (done ? ' done' : '');
-  div.id = id;
-  div.innerHTML = `<span class="tool-icon">${done ? '✅' : '⚙️'}</span> ${toolName}`;
-  bubble.appendChild(div);
-  scrollBottom();
-  return id;
-}
-
-function markToolDone(id) {
-  const el = $(id);
-  if (el) {
-    el.className = 'tool-call done';
-    el.querySelector('.tool-icon').textContent = '✅';
-  }
-}
-
-// ── 发送消息 ──
 async function sendMessage() {
   if (isLoading) return;
-  const input = $('input');
-  const text = input.value.trim();
+  const box = document.getElementById('inputBox');
+  const text = box.value.trim();
   if (!text) return;
+  box.value = ''; box.style.height = 'auto';
 
-  input.value = '';
-  input.style.height = 'auto';
+  const s = curSession();
+  if (!s) return;
+
   setLoading(true);
+  appendUserBubble(text);
+  s.history.push({ role: 'user', content: text });
 
-  addUserMessage(text);
-  history.push({ role: 'user', content: text });
+  // 更新会话名（首条消息）
+  if (s.history.length === 1) {
+    s.name = text.slice(0, 18) + (text.length > 18 ? '…' : '');
+    renderSessionList();
+  }
 
-  const thinkEl = addThinking();
+  appendThinking();
 
+  // 流式请求
   try {
-    const { el: aiEl, bubbleId } = addAiMessage();
-    removeThinking();
-
-    let fullText = '';
-    let toolIds = {};
-    let rounds = 0, durationMs = 0, inputTokens = 0, outputTokens = 0;
-
-    // 用 SSE 流式接口
-    const resp = await fetch(BASE + '/chat/stream', {
+    const resp = await fetch('/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: text,
-        history: history.slice(0, -1),  // 不含当前问题（已在 message 里）
+        history: s.history.slice(0, -1),
       }),
     });
 
+    document.getElementById('thinkingRow')?.remove();
+    const { bid, mid } = appendAiBubble('', [], 0, 0, 0, true);
+
+    let fullText = '';
+    let toolsDone = [];
+    let curToolId = null;
+
     const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
+    const dec = new TextDecoder();
     let buf = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buf += decoder.decode(value, { stream: true });
-
-      // 解析 SSE 行
+      buf += dec.decode(value, { stream: true });
       const lines = buf.split('\n');
-      buf = lines.pop();  // 最后一行可能不完整
-
-      let curEvent = null;
+      buf = lines.pop();
+      let curEvt = null;
       for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          curEvent = line.slice(7).trim();
-        } else if (line.startsWith('data: ') && curEvent) {
+        if (line.startsWith('event: ')) curEvt = line.slice(7).trim();
+        else if (line.startsWith('data: ') && curEvt) {
           try {
             const data = JSON.parse(line.slice(6));
-            handleEvent(curEvent, data, bubbleId, toolIds, (t) => {
-              fullText += t;
-              // 实时渲染 Markdown
-              $(bubbleId).innerHTML = marked.parse(fullText);
+            if (curEvt === 'text_delta') {
+              fullText += data.text || '';
+              document.getElementById(bid).innerHTML = marked.parse(fullText);
               scrollBottom();
-            }, (stats) => {
-              rounds = stats.rounds;
-              durationMs = stats.duration_ms;
-              inputTokens = stats.total_input_tokens;
-              outputTokens = stats.total_output_tokens;
-            });
+            } else if (curEvt === 'tool_call_start') {
+              const name = data.name || 'tool';
+              curToolId = 'tc_' + genId();
+              const bubble = document.getElementById(bid);
+              const tag = document.createElement('div');
+              tag.className = 'tool-tag'; tag.id = curToolId;
+              tag.innerHTML = `⚙️ 调用 ${esc(name)}…`;
+              bubble.parentElement.insertBefore(tag, bubble);
+              scrollBottom();
+            } else if (curEvt === 'tool_result') {
+              if (curToolId) {
+                const tag = document.getElementById(curToolId);
+                if (tag) { tag.className = 'tool-tag done'; tag.textContent = '✅ ' + (data.name || 'tool'); }
+                toolsDone.push(data.name || 'tool');
+              }
+            } else if (curEvt === 'complete') {
+              const inTok  = data.total_input_tokens  || 0;
+              const outTok = data.total_output_tokens || 0;
+              const tokenStr = (inTok + outTok) > 0 ? `${inTok}+${outTok} tok` : '';
+              document.getElementById(mid).innerHTML = `<div class="msg-meta">
+                <span>🔄 ${data.rounds||1}轮</span>
+                <span>⏱ ${((data.duration_ms||0)/1000).toFixed(1)}s</span>
+                ${tokenStr ? `<span>📊 ${tokenStr}</span>` : ''}
+              </div>`;
+            } else if (curEvt === 'error') {
+              document.getElementById(bid).innerHTML = `<span style="color:var(--red)">⚠️ ${esc(data.message||'未知错误')}</span>`;
+            }
           } catch(e) {}
-          curEvent = null;
+          curEvt = null;
         }
       }
     }
 
-    // 渲染元信息
-    const meta = $('meta_' + bubbleId);
-    if (meta) {
-      meta.innerHTML = `
-        <span>🔄 ${rounds}轮</span>
-        <span>⏱ ${(durationMs/1000).toFixed(1)}s</span>
-        <span>📊 ${inputTokens}+${outputTokens} tokens</span>
-      `;
-    }
-
-    // 加入历史
-    if (fullText) {
-      history.push({ role: 'assistant', content: fullText });
-      // 只保留最近20条（10轮）
-      if (history.length > 20) history.splice(0, history.length - 20);
-    }
+    s.history.push({ role: 'assistant', content: fullText });
+    if (s.history.length > 40) s.history.splice(0, s.history.length - 40);
 
   } catch(err) {
-    removeThinking();
-    const wrap = $('messageWrap');
+    document.getElementById('thinkingRow')?.remove();
+    const c = document.getElementById('chatMsgs');
     const el = document.createElement('div');
-    el.className = 'message';
-    el.innerHTML = `
-      <div class="avatar">🪺</div>
-      <div class="bubble" style="color:#f87171">⚠️ 连接失败: ${escapeHtml(err.message)}<br><small>请确认后端服务已启动: uvicorn tradenest.main:app --reload</small></div>
-    `;
-    wrap.appendChild(el);
+    el.className = 'msg-row';
+    el.innerHTML = `<div class="avatar">🪺</div><div class="msg-body"><div class="bubble" style="color:var(--red)">
+      ⚠️ 无法连接到后端：${esc(err.message)}<br>
+      <small>请确认已启动：<code>uvicorn tradenest.main:app --reload</code></small>
+    </div></div>`;
+    c.appendChild(el);
   }
 
   setLoading(false);
-  $('input').focus();
+  document.getElementById('inputBox').focus();
   scrollBottom();
 }
 
-function handleEvent(type, data, bubbleId, toolIds, onText, onComplete) {
-  if (type === 'text_delta') {
-    onText(data.text || '');
-  } else if (type === 'tool_call_start') {
-    const name = data.name || 'tool';
-    const id = addToolCall(bubbleId, `调用 ${name}...`);
-    toolIds[name] = id;
-  } else if (type === 'tool_result') {
-    const name = data.tool_name || '';
-    if (toolIds[name]) markToolDone(toolIds[name]);
-  } else if (type === 'complete') {
-    onComplete(data);
-  }
-}
-
-// ── 检查后端连通性 ──
-async function checkHealth() {
+// ════════════════════════════════════════
+//  行情条
+// ════════════════════════════════════════
+async function loadMarketBar() {
   try {
-    const r = await fetch(BASE + '/health');
-    if (r.ok) {
-      $('statusDot').style.background = 'var(--green)';
-      $('statusDot').title = '已连接';
-    } else {
-      throw new Error('not ok');
+    const r = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: '用get_global_markets工具，返回简洁的各指数价格和涨跌幅，只返回数字，不要解释', history: [] }),
+    });
+    // 行情条用的是一个独立的快速 API 直接抓
+    // 这里改用直接调新浪行情接口（通过后端代理）
+  } catch(e) {}
+
+  // 直接从 /market-snapshot 拿（我们加一个轻量接口）
+  // 暂时用静态占位，等后端接口就绪
+  const bar = document.getElementById('mktBar');
+  bar.innerHTML = `
+    <div class="mkt-item"><span class="mkt-name">上证</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+    <div class="mkt-sep">|</div>
+    <div class="mkt-item"><span class="mkt-name">深证</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+    <div class="mkt-sep">|</div>
+    <div class="mkt-item"><span class="mkt-name">创业板</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+    <div class="mkt-sep">|</div>
+    <div class="mkt-item"><span class="mkt-name">道指</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+    <div class="mkt-sep">|</div>
+    <div class="mkt-item"><span class="mkt-name">纳指</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+    <div class="mkt-sep">|</div>
+    <div class="mkt-item"><span class="mkt-name">黄金</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+    <div class="mkt-sep">|</div>
+    <div class="mkt-item"><span class="mkt-name">美元/人民币</span><span class="mkt-price">—</span><span class="mkt-chg">—</span></div>
+  `;
+  // 异步拉真实数据
+  fetchMarketBarData();
+}
+
+async function fetchMarketBarData() {
+  // 调新浪行情（通过 fetch，同域请求后端转发或直接）
+  // 后续可加 /api/market-bar 后端接口
+  // 暂时留空，框架已就绪
+}
+
+// ════════════════════════════════════════
+//  右侧面板
+// ════════════════════════════════════════
+function switchTab(el) {
+  document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const tab = el.dataset.tab;
+  ['watchlist','news','global'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+  });
+}
+
+// 自选股
+function loadWatchlistCards() {
+  const c = document.getElementById('watchlistCards');
+  if (watchlist.length === 0) {
+    c.innerHTML = '';
+    document.getElementById('watchEmpty').style.display = '';
+    return;
+  }
+  document.getElementById('watchEmpty').style.display = 'none';
+  c.innerHTML = watchlist.map(code => `
+    <div class="quote-card" id="qc_${code}">
+      <div class="qc-header">
+        <div><div class="qc-name" id="qn_${code}">加载中…</div><div class="qc-code">${code}</div></div>
+        <span style="cursor:pointer;color:var(--text3);font-size:11px" onclick="removeWatch('${code}')">✕</span>
+      </div>
+      <div class="qc-price" id="qp_${code}">—</div>
+      <div class="qc-chg" id="qc2_${code}">—</div>
+      <div class="qc-grid">
+        <span class="qc-label">今开</span><span class="qc-val" id="qo_${code}">—</span>
+        <span class="qc-label">最高</span><span class="qc-val" id="qh_${code}">—</span>
+        <span class="qc-label">成交额</span><span class="qc-val" id="qa_${code}">—</span>
+        <span class="qc-label">换手</span><span class="qc-val" id="qt2_${code}">—</span>
+      </div>
+    </div>
+  `).join('');
+  fetchWatchlistQuotes();
+}
+
+async function fetchWatchlistQuotes() {
+  if (watchlist.length === 0) return;
+  const symbols = watchlist.map(c => (c.startsWith('6') ? 'sh' : 'sz') + c).join(',');
+  try {
+    const r = await fetch(`https://hq.sinajs.cn/list=${symbols}`, {
+      headers: { Referer: 'https://finance.sina.com.cn/' }
+    });
+    const text = await r.text();
+    for (const line of text.split('\n')) {
+      if (!line.includes('"') || !line.includes(',')) continue;
+      const key = line.split('=')[0].trim().replace(/^var hq_str_/, '');
+      const code = key.slice(2);
+      const parts = line.split('"')[1]?.split(',') || [];
+      if (parts.length < 6 || !parts[3]) continue;
+      const name = parts[0], open = parts[1], prev = parts[2], price = parts[3];
+      const high = parts[4], low = parts[5];
+      const amount = parseFloat(parts[9] || '0') / 100000000;
+      const chg = (parseFloat(price) - parseFloat(prev)).toFixed(2);
+      const pct = ((parseFloat(price) - parseFloat(prev)) / parseFloat(prev) * 100).toFixed(2);
+      const up = parseFloat(chg) >= 0;
+
+      const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+      const setC = (id, v, cls) => { const el = document.getElementById(id); if(el){el.textContent=v;el.className='qc-chg '+cls;} };
+      set(`qn_${code}`, name);
+      set(`qp_${code}`, '¥' + price);
+      setC(`qc2_${code}`, `${up?'+':''}${chg}  ${up?'+':''}${pct}%`, up?'up':'down');
+      set(`qo_${code}`, '¥' + open);
+      set(`qh_${code}`, '¥' + high);
+      set(`qa_${code}`, amount.toFixed(2) + '亿');
     }
-  } catch {
-    $('statusDot').style.background = 'var(--red)';
-    $('statusDot').style.boxShadow = '0 0 6px var(--red)';
-    $('statusDot').title = '后端未连接';
+  } catch(e) {}
+}
+
+function addToWatchlist() {
+  const code = prompt('输入股票代码（如 600519）：');
+  if (!code || !/^\d{6}$/.test(code.trim())) { alert('请输入6位股票代码'); return; }
+  if (!watchlist.includes(code.trim())) {
+    watchlist.push(code.trim());
+    localStorage.setItem('tn_watchlist', JSON.stringify(watchlist));
+    loadWatchlistCards();
   }
 }
 
-// 启动时检查
-checkHealth();
-setInterval(checkHealth, 30000);
+function removeWatch(code) {
+  watchlist = watchlist.filter(c => c !== code);
+  localStorage.setItem('tn_watchlist', JSON.stringify(watchlist));
+  loadWatchlistCards();
+}
 
-// 自动聚焦
-$('input').focus();
+// 快讯
+async function loadNewsPanel() {
+  const el = document.getElementById('newsPanel');
+  el.innerHTML = '<div class="panel-empty">加载中…</div>';
+  try {
+    const r = await fetch('https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2515&num=15&page=1&r=0.5', {
+      headers: { Referer: 'https://finance.sina.com.cn/' }
+    });
+    const d = await r.json();
+    const items = d?.result?.data || [];
+    el.innerHTML = items.slice(0,15).map(i => `
+      <div class="news-item">
+        <div class="news-time">${new Date(i.ctime*1000).toLocaleTimeString('zh',{hour:'2-digit',minute:'2-digit'})}</div>
+        <div class="news-title" onclick="askAboutNews('${esc(i.title)}')">${esc(i.title)}</div>
+        <span class="news-src">新浪财经</span>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="panel-empty">加载失败，请检查网络</div>';
+  }
+}
+
+function askAboutNews(title) {
+  document.getElementById('inputBox').value = `帮我分析这条新闻对股市的影响：${title}`;
+  sendMessage();
+}
+
+// 外盘
+async function loadGlobalPanel() {
+  const el = document.getElementById('globalPanel');
+  el.innerHTML = '<div class="panel-empty">加载中…</div>';
+  const symbols = 'int_dji,int_nasdaq,int_sp500,int_hangseng,int_nikkei,fx_usdcnh,hf_GC,hf_CL';
+  const names = {int_dji:'道琼斯',int_nasdaq:'纳斯达克',int_sp500:'标普500',int_hangseng:'恒生指数',int_nikkei:'日经225',fx_usdcnh:'美元/人民币',hf_GC:'黄金',hf_CL:'原油(WTI)'};
+  try {
+    const r = await fetch(`https://hq.sinajs.cn/list=${symbols}`, {
+      headers: { Referer: 'https://finance.sina.com.cn/' }
+    });
+    const text = await r.text();
+    let html = '';
+    for (const line of text.split('\n')) {
+      if (!line.includes('"') || !line.includes(',')) continue;
+      const key = line.split('=')[0].trim().replace(/^var hq_str_/, '');
+      const parts = line.split('"')[1]?.split(',') || [];
+      if (!parts[1]) continue;
+      const price = parts[1], chg = parts[2], pct = parseFloat(parts[3]||0);
+      const up = pct >= 0;
+      const name = names[key] || key;
+      html += `<div class="quote-card">
+        <div class="qc-header"><div class="qc-name">${esc(name)}</div></div>
+        <div class="qc-price">${esc(price)}</div>
+        <div class="qc-chg ${up?'up':'down'}">${up?'+':''}${chg} (${up?'+':''}${pct.toFixed(2)}%)</div>
+      </div>`;
+    }
+    el.innerHTML = html || '<div class="panel-empty">暂无数据</div>';
+  } catch(e) {
+    el.innerHTML = '<div class="panel-empty">加载失败</div>';
+  }
+}
+
+// ════════════════════════════════════════
+//  健康检查
+// ════════════════════════════════════════
+async function checkHealth() {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusTxt');
+  try {
+    const r = await fetch('/health');
+    if (r.ok) { dot.className='status-dot'; txt.textContent='已连接'; }
+    else throw new Error();
+  } catch {
+    dot.className='status-dot err'; txt.textContent='未连接';
+  }
+}
 </script>
 </body>
 </html>
