@@ -354,9 +354,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 
 /* ───────────── RIGHT PANEL (可折叠) ───────────── */
 .right-panel {
-  width: 380px; flex-shrink: 0;
+  width: 380px; min-width: 280px; max-width: 680px; flex-shrink: 0;
   background: var(--sidebar); border-left: 1px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden;
+  position: relative;
+}
+/* 拖拽手柄 */
+.panel-resizer {
+  position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
+  cursor: col-resize; z-index: 100;
+  background: transparent;
+}
+.panel-resizer:hover, .panel-resizer.dragging {
+  background: rgba(79,142,247,.3);
 }
 .panel-tab-bar {
   display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -449,6 +459,28 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       <span id="statusTxt">连接中</span>
     </div>
     <button onclick="openSettings()" title="设置" style="background:none;border:1px solid #444;border-radius:6px;padding:3px 8px;font-size:14px;cursor:pointer;color:#ccc">⚙️</button>
+  </div>
+</div>
+
+<!-- 买入/卖出弹窗 -->
+<div id="tradeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:24px;width:360px;max-width:90vw">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 id="tradeModalTitle" style="margin:0;font-size:15px"></h3>
+      <button onclick="closeTradeModal()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><div style="font-size:11px;color:#666;margin-bottom:3px">交易日期</div><input id="tradeDate" type="date" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px;color:#eee;font-size:12px"></div>
+      <div><div style="font-size:11px;color:#666;margin-bottom:3px">价格（元/股）</div><input id="tradePrice" type="number" step="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px;color:#eee;font-size:12px"></div>
+      <div><div style="font-size:11px;color:#666;margin-bottom:3px">数量（股）</div><input id="tradeShares" type="number" step="100" placeholder="100" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px;color:#eee;font-size:12px"></div>
+      <div><div style="font-size:11px;color:#666;margin-bottom:3px">手续费（元）</div><input id="tradeFee" type="number" step="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px;color:#eee;font-size:12px"></div>
+    </div>
+    <input id="tradeNote" type="text" placeholder="备注（可留空）" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px;color:#eee;font-size:12px;margin-bottom:8px">
+    <div id="tradeTip" style="font-size:11px;color:#ef4444;min-height:14px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="submitTrade()" style="flex:1;background:#4ade80;color:#000;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:600;cursor:pointer">确认</button>
+      <button onclick="closeTradeModal()" style="flex:1;background:#333;color:#aaa;border:1px solid #444;border-radius:8px;padding:10px;font-size:14px;cursor:pointer">取消</button>
+    </div>
   </div>
 </div>
 
@@ -592,31 +624,71 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   </div>
 
   <!-- RIGHT PANEL -->
-  <div class="right-panel">
+  <div class="right-panel" id="rightPanel">
+    <div class="panel-resizer" id="panelResizer"></div>
     <div class="panel-tab-bar">
-      <div class="panel-tab active" data-tab="watchlist" onclick="switchTab(this)">自选股</div>
+      <div class="panel-tab active" data-tab="positions" onclick="switchTab(this)">💼 持仓</div>
+      <div class="panel-tab" data-tab="watchlist" onclick="switchTab(this)">👁 关注</div>
       <div class="panel-tab" data-tab="alerts" onclick="switchTab(this)">预警 <span id="alertBadge" style="display:none;background:#f55;color:#fff;border-radius:8px;padding:0 5px;font-size:11px">0</span></div>
       <div class="panel-tab" data-tab="news" onclick="switchTab(this)">快讯</div>
       <div class="panel-tab" data-tab="global" onclick="switchTab(this)">外盘</div>
       <div class="panel-tab" data-tab="kline" onclick="switchTab(this)">K线</div>
     </div>
     <div class="panel-body" id="panelBody">
-      <!-- 自选股 -->
-      <div id="tab-watchlist">
-        <div id="watchlistCards"></div>
-        <button id="addWatchBtn" class="add-watch-btn" onclick="showAddWatchForm()">＋ 添加自选股</button>
-        <div id="addWatchForm" style="display:none;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px;margin-top:8px">
-          <div style="font-size:12px;color:#aaa;margin-bottom:6px">输入股票代码</div>
-          <input id="newWatchCode" type="text" maxlength="6" placeholder="如6位代码，如 600519"
-            onkeydown="if(event.key==='Enter')submitAddWatch();if(event.key==='Escape')hideAddWatchForm()"
-            style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:13px;margin-bottom:6px">
-          <div id="newWatchTip" style="font-size:11px;color:#ef4444;min-height:14px;margin-bottom:6px"></div>
-          <div style="display:flex;gap:6px">
-            <button onclick="submitAddWatch()" style="flex:1;background:#4ade80;color:#000;border:none;border-radius:6px;padding:6px;font-size:12px;font-weight:600;cursor:pointer">添加</button>
-            <button onclick="hideAddWatchForm()" style="flex:1;background:#333;color:#aaa;border:1px solid #444;border-radius:6px;padding:6px;font-size:12px;cursor:pointer">取消</button>
+      <!-- 持仓 -->
+      <div id="tab-positions">
+        <!-- 总览 -->
+        <div id="portfolioSummary" style="background:#1a1a1a;border-radius:8px;padding:12px;margin-bottom:10px;display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:12px;color:#888">持仓总览</span>
+            <button onclick="loadPortfolio()" style="background:none;border:none;color:#555;cursor:pointer;font-size:13px">↻</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+            <div><div style="color:#666;font-size:10px">总市值</div><div id="pf-market-value" style="color:#eee;font-weight:600">—</div></div>
+            <div><div style="color:#666;font-size:10px">总成本</div><div id="pf-total-cost" style="color:#eee">—</div></div>
+            <div><div style="color:#666;font-size:10px">总盈亏</div><div id="pf-total-profit" style="font-weight:600">—</div></div>
+            <div><div style="color:#666;font-size:10px">今日盈亏</div><div id="pf-today-profit" style="font-weight:600">—</div></div>
           </div>
         </div>
-        <div class="panel-empty" id="watchEmpty" style="display:none">暂无自选股<br><small>点击上方添加</small></div>
+        <!-- 持仓列表 -->
+        <div id="positionList"><div class="panel-empty">暂无持仓</div></div>
+        <button id="addPosBtn" class="add-watch-btn" onclick="showAddPositionForm()" style="margin-top:8px">＋ 新建持仓</button>
+        <div id="addPosForm" style="display:none;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px;margin-top:8px">
+          <div style="font-size:12px;color:#aaa;margin-bottom:8px;font-weight:600">新建持仓</div>
+          <input id="posCode" type="text" maxlength="6" placeholder="股票代码（6位）" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:13px;margin-bottom:6px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+            <div><div style="font-size:11px;color:#666;margin-bottom:3px">买入日期</div><input id="posDate" type="date" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:6px;color:#eee;font-size:12px"></div>
+            <div><div style="font-size:11px;color:#666;margin-bottom:3px">买入价格（元）</div><input id="posPrice" type="number" step="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:6px;color:#eee;font-size:12px"></div>
+            <div><div style="font-size:11px;color:#666;margin-bottom:3px">买入数量（股）</div><input id="posShares" type="number" step="100" placeholder="100" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:6px;color:#eee;font-size:12px"></div>
+            <div><div style="font-size:11px;color:#666;margin-bottom:3px">手续费（元）</div><input id="posFee" type="number" step="0.01" placeholder="0.00" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:6px;color:#eee;font-size:12px"></div>
+          </div>
+          <input id="posNote" type="text" placeholder="备注（可留空）" style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:6px;color:#eee;font-size:12px;margin-bottom:6px">
+          <div id="posTip" style="font-size:11px;color:#ef4444;min-height:14px;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px">
+            <button onclick="submitAddPosition()" style="flex:1;background:#4ade80;color:#000;border:none;border-radius:6px;padding:7px;font-size:12px;font-weight:600;cursor:pointer">确认买入</button>
+            <button onclick="hideAddPositionForm()" style="flex:1;background:#333;color:#aaa;border:1px solid #444;border-radius:6px;padding:7px;font-size:12px;cursor:pointer">取消</button>
+          </div>
+        </div>
+        <!-- 历史持仓 -->
+        <div id="historySection" style="margin-top:12px;display:none">
+          <div style="font-size:11px;color:#555;padding:6px 0;border-bottom:1px solid #222;cursor:pointer;user-select:none" onclick="toggleHistory(this)">▶ 历史持仓</div>
+          <div id="historyList" style="display:none"></div>
+        </div>
+      </div>
+      <!-- 关注 -->
+      <div id="tab-watchlist" style="display:none">
+        <div id="portfolioWatchCards"></div>
+        <button id="addWatchlistBtn" class="add-watch-btn" onclick="showAddWatchlistForm()">＋ 添加关注</button>
+        <div id="addWatchlistForm" style="display:none;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:12px;margin-top:8px">
+          <input id="newWatchlistCode" type="text" maxlength="6" placeholder="6位股票代码"
+            onkeydown="if(event.key==='Enter')submitAddWatchlist();if(event.key==='Escape')hideAddWatchlistForm()"
+            style="width:100%;box-sizing:border-box;background:#0f0f0f;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:13px;margin-bottom:6px">
+          <div id="newWatchlistTip" style="font-size:11px;color:#ef4444;min-height:14px;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px">
+            <button onclick="submitAddWatchlist()" style="flex:1;background:#4ade80;color:#000;border:none;border-radius:6px;padding:6px;font-size:12px;font-weight:600;cursor:pointer">添加</button>
+            <button onclick="hideAddWatchlistForm()" style="flex:1;background:#333;color:#aaa;border:1px solid #444;border-radius:6px;padding:6px;font-size:12px;cursor:pointer">取消</button>
+          </div>
+        </div>
       </div>
       <!-- 预警 -->
       <div id="tab-alerts" style="display:none">
@@ -782,7 +854,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (sessions.length === 0) await newSession(true);  // 没有则新建
   checkHealth();
   loadMarketBar();
-  await loadWatchlistFromServer();  // 自选股从后端加载
+  await loadWatchlistFromServer();  // 旧自选股（兼容）
+  await loadPortfolio();             // 持仓
+  loadPortfolioWatchlist();          // 关注
   await loadRoleFromServer();       // 角色从后端加载
   await loadAlertsFromServer();     // 预警列表
   setInterval(checkHealth, 30000);
@@ -1167,12 +1241,14 @@ function switchTab(el) {
   document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   const tab = el.dataset.tab;
-  ['watchlist','alerts','news','global','kline'].forEach(t => {
+  ['positions','watchlist','alerts','news','global','kline'].forEach(t => {
     const node = document.getElementById('tab-' + t);
     if (node) node.style.display = t === tab ? '' : 'none';
   });
-  if (tab === 'news'   && !window._newsLoaded)  { window._newsLoaded = true;   loadNewsPanel(); }
-  if (tab === 'global' && !window._globalLoaded){ window._globalLoaded = true; loadGlobalPanel(); }
+  if (tab === 'positions' && !window._posLoaded)  { window._posLoaded = true;  loadPortfolio(); }
+  if (tab === 'watchlist' && !window._wlLoaded)   { window._wlLoaded = true;   loadPortfolioWatchlist(); }
+  if (tab === 'news'   && !window._newsLoaded)    { window._newsLoaded = true;  loadNewsPanel(); }
+  if (tab === 'global' && !window._globalLoaded)  { window._globalLoaded = true; loadGlobalPanel(); }
   if (tab === 'kline'  && klineChart) klineChart.resize();
 }
 
@@ -1620,6 +1696,299 @@ function togglePwd(inputId, btn) {
   el.type = show ? 'text' : 'password';
   btn.textContent = show ? '🙈' : '👁️';
 }
+
+// ── 持仓管理 ──────────────────────────────────────────────
+
+async function loadPortfolio() {
+  await Promise.all([loadPositions(), loadPortfolioSummary()]);
+}
+
+async function loadPortfolioSummary() {
+  try {
+    const r = await fetch('/api/portfolio/summary');
+    const d = await r.json();
+    document.getElementById('portfolioSummary').style.display = d.position_count > 0 ? '' : 'none';
+    const fmt = (v, plus=false) => (plus && v > 0 ? '+' : '') + v.toFixed(2);
+    const col = v => v >= 0 ? '#ef4444' : '#22c55e';
+    document.getElementById('pf-market-value').textContent = '¥' + d.total_market_value.toFixed(2);
+    document.getElementById('pf-total-cost').textContent   = '¥' + d.total_cost.toFixed(2);
+    document.getElementById('pf-total-profit').innerHTML   = `<span style="color:${col(d.total_profit)}">${fmt(d.total_profit,true)} (${fmt(d.total_profit_pct,true)}%)</span>`;
+    document.getElementById('pf-today-profit').innerHTML   = `<span style="color:${col(d.today_profit)}">${fmt(d.today_profit,true)}</span>`;
+  } catch(e) { console.warn('summary failed', e); }
+}
+
+async function loadPositions() {
+  try {
+    const r = await fetch('/api/portfolio/positions');
+    const d = await r.json();
+    const el = document.getElementById('positionList');
+    if (!d.positions.length) {
+      el.innerHTML = '<div class="panel-empty">暂无持仓，点击下方新建</div>';
+      return;
+    }
+    el.innerHTML = d.positions.map(p => {
+      const up = p.total_profit >= 0;
+      const col = up ? '#ef4444' : '#22c55e';
+      const todayUp = p.today_profit >= 0;
+      const tCol = todayUp ? '#ef4444' : '#22c55e';
+      const sign = v => v >= 0 ? '+' : '';
+      return `
+      <div class="alert-card" style="margin-bottom:8px;border-radius:10px">
+        <div class="ah" style="margin-bottom:6px">
+          <span style="font-size:13px;font-weight:600">${esc(p.name)} <span style="color:#555;font-size:11px">${p.code}</span></span>
+          <div style="display:flex;gap:8px">
+            <span onclick="openTradeModal(${p.id},'buy')" style="cursor:pointer;color:#4ade80;font-size:11px;border:1px solid #2a4a2a;padding:2px 6px;border-radius:4px">买入</span>
+            <span onclick="openTradeModal(${p.id},'sell')" style="cursor:pointer;color:#f87171;font-size:11px;border:1px solid #4a2a2a;padding:2px 6px;border-radius:4px">卖出</span>
+            <span onclick="deletePosition(${p.id})" style="cursor:pointer;color:#555;font-size:13px">×</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px">
+          <div style="grid-column:span 2;display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:16px;font-weight:700;color:#fff">¥${p.current_price}</span>
+            <span style="color:${p.today_pct>=0?'#ef4444':'#22c55e'};font-size:12px">${sign(p.today_pct)}${p.today_pct}%</span>
+          </div>
+          <div><span style="color:#666">持股</span> <b>${p.total_shares}股</b></div>
+          <div><span style="color:#666">市值</span> <b>¥${p.market_value.toFixed(0)}</b></div>
+          <div><span style="color:#666">均价</span> ¥${p.avg_cost.toFixed(3)}</div>
+          <div><span style="color:#666">成本</span> ¥${p.total_cost.toFixed(0)}</div>
+          <div style="grid-column:span 2;margin-top:4px;padding-top:4px;border-top:1px solid #222">
+            <span style="color:#666">总盈亏</span>
+            <span style="color:${col};font-weight:600">${sign(p.total_profit)}¥${p.total_profit.toFixed(2)} (${sign(p.profit_pct)}${p.profit_pct}%)</span>
+            &nbsp;&nbsp;
+            <span style="color:#666">今日</span>
+            <span style="color:${tCol}">${sign(p.today_profit)}¥${p.today_profit.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    
+    // 历史持仓
+    loadHistoryPositions();
+  } catch(e) { console.error('loadPositions failed', e); }
+}
+
+async function loadHistoryPositions() {
+  try {
+    const r = await fetch('/api/portfolio/history');
+    const d = await r.json();
+    const sec = document.getElementById('historySection');
+    const el  = document.getElementById('historyList');
+    if (!d.history.length) { sec.style.display = 'none'; return; }
+    sec.style.display = '';
+    el.innerHTML = d.history.map(h => {
+      const col = h.realized_profit >= 0 ? '#ef4444' : '#22c55e';
+      const sign = h.realized_profit >= 0 ? '+' : '';
+      return `<div style="padding:8px 0;border-bottom:1px solid #1a1a1a;font-size:12px">
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-weight:600">${esc(h.name)} (${h.code})</span>
+          <span style="color:${col};font-weight:600">${sign}¥${h.realized_profit.toFixed(2)}</span>
+        </div>
+        <div style="color:#555;font-size:10px;margin-top:2px">
+          均价${h.avg_buy_price} → 卖价${h.avg_sell_price} &middot; 持${h.hold_days}天 &middot; ${h.buy_date} ~ ${h.sell_date}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
+function toggleHistory(btn) {
+  const el = document.getElementById('historyList');
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : '';
+  btn.textContent = (open ? '▶' : '▼') + ' 历史持仓';
+}
+
+// 持仓表单
+function showAddPositionForm() {
+  document.getElementById('addPosForm').style.display = 'block';
+  document.getElementById('addPosBtn').style.display = 'none';
+  // 默认日期为今天
+  document.getElementById('posDate').value = new Date().toISOString().slice(0,10);
+  setTimeout(() => document.getElementById('posCode').focus(), 50);
+}
+function hideAddPositionForm() {
+  document.getElementById('addPosForm').style.display = 'none';
+  document.getElementById('addPosBtn').style.display = 'block';
+  ['posCode','posPrice','posShares','posFee','posNote'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('posTip').textContent = '';
+}
+
+async function submitAddPosition() {
+  const code   = document.getElementById('posCode').value.trim();
+  const date   = document.getElementById('posDate').value;
+  const price  = parseFloat(document.getElementById('posPrice').value);
+  const shares = parseFloat(document.getElementById('posShares').value);
+  const fee    = parseFloat(document.getElementById('posFee').value) || 0;
+  const note   = document.getElementById('posNote').value.trim();
+  const tip    = document.getElementById('posTip');
+  if (!/^\d{6}$/.test(code)) { tip.textContent = '请输入6位股票代码'; return; }
+  if (!date)                  { tip.textContent = '请选择买入日期'; return; }
+  if (!price || price <= 0)   { tip.textContent = '请输入买入价格'; return; }
+  if (!shares || shares <= 0) { tip.textContent = '请输入买入数量'; return; }
+  tip.textContent = '';
+  try {
+    const r = await fetch('/api/portfolio/positions', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code, date, price, shares, fee, note })
+    });
+    const d = await r.json();
+    if (d.ok) { hideAddPositionForm(); await loadPortfolio(); }
+    else tip.textContent = d.detail || '新建失败';
+  } catch(e) { tip.textContent = '请求失败'; }
+}
+
+async function deletePosition(id) {
+  if (!confirm('确认删除这个持仓（含交易流水）？')) return;
+  await fetch('/api/portfolio/positions/' + id, { method: 'DELETE' });
+  await loadPortfolio();
+}
+
+// 买入/卖出弹窗
+let _tradePositionId = null;
+let _tradeType = null;
+
+function openTradeModal(posId, type) {
+  _tradePositionId = posId;
+  _tradeType = type;
+  const modal = document.getElementById('tradeModal');
+  const title = document.getElementById('tradeModalTitle');
+  title.textContent = type === 'buy' ? '加仓买入' : '减仓卖出';
+  document.getElementById('tradeDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('tradeTip').textContent = '';
+  ['tradePrice','tradeShares','tradeFee','tradeNote'].forEach(id => document.getElementById(id).value = '');
+  modal.style.display = 'flex';
+}
+
+function closeTradeModal() {
+  document.getElementById('tradeModal').style.display = 'none';
+  _tradePositionId = null;
+}
+
+async function submitTrade() {
+  const date   = document.getElementById('tradeDate').value;
+  const price  = parseFloat(document.getElementById('tradePrice').value);
+  const shares = parseFloat(document.getElementById('tradeShares').value);
+  const fee    = parseFloat(document.getElementById('tradeFee').value) || 0;
+  const note   = document.getElementById('tradeNote').value.trim();
+  const tip    = document.getElementById('tradeTip');
+  if (!date || !price || !shares) { tip.textContent = '请填写日期、价格、数量'; return; }
+  const url = `/api/portfolio/positions/${_tradePositionId}/${_tradeType}`;
+  try {
+    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code:'', date, price, shares, fee, note }) });
+    const d = await r.json();
+    if (d.ok) {
+      closeTradeModal();
+      await loadPortfolio();
+      if (_tradeType === 'sell' && d.this_profit !== undefined) {
+        const sign = d.this_profit >= 0 ? '+' : '';
+        appendSystemMsg(`卖出完成！本次实现盈亏 ${sign}¥${d.this_profit.toFixed(2)}`);
+      }
+    } else {
+      tip.textContent = d.detail || '操作失败';
+    }
+  } catch(e) { tip.textContent = '请求失败'; }
+}
+
+// 关注列表加载
+async function loadPortfolioWatchlist() {
+  try {
+    const r = await fetch('/api/portfolio/watchlist');
+    const d = await r.json();
+    const el = document.getElementById('portfolioWatchCards');
+    if (!d.watchlist.length) {
+      el.innerHTML = '<div class="panel-empty">暂无关注，点击下方添加</div>';
+      return;
+    }
+    el.innerHTML = d.watchlist.map(w => {
+      const up = w.up;
+      const col = up ? '#ef4444' : '#22c55e';
+      const sign = up ? '+' : '';
+      return `<div class="alert-card" style="margin-bottom:8px;border-radius:10px">
+        <div class="ah" style="margin-bottom:6px">
+          <span style="font-size:13px;font-weight:600">${esc(w.display_name)} <span style="color:#555;font-size:11px">${w.code}</span></span>
+          <div style="display:flex;gap:6px">
+            <span onclick="watchToPosition('${w.code}')" style="cursor:pointer;color:#4ade80;font-size:11px;border:1px solid #2a4a2a;padding:2px 6px;border-radius:4px">转持仓</span>
+            <span onclick="removePortfolioWatch('${w.code}')" style="cursor:pointer;color:#555;font-size:13px">×</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:16px;font-weight:700;color:#fff">¥${w.current_price||'—'}</span>
+          <span style="color:${col};font-size:13px">${sign}${w.chg} (${sign}${w.pct}%)</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;color:#666;margin-top:6px">
+          <div>今开 ¥${w.open||'—'}</div><div>最高 ¥${w.high||'—'}</div>
+          <div>成交额 ${w.amount?((w.amount/1e8).toFixed(2)+'亿'):'—'}</div><div>最低 ¥${w.low||'—'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error('watchlist failed', e); }
+}
+
+async function removePortfolioWatch(code) {
+  await fetch('/api/portfolio/watchlist/' + code, { method: 'DELETE' });
+  await loadPortfolioWatchlist();
+}
+
+let _watchToPositionCode = null;
+function watchToPosition(code) {
+  _watchToPositionCode = code;
+  // 复用持仓表单
+  showAddPositionForm();
+  document.getElementById('posCode').value = code;
+  document.getElementById('posCode').readOnly = true;
+  // 切回持仓 tab
+  document.querySelector('[data-tab="positions"]').click();
+}
+
+// 关注添加
+function showAddWatchlistForm() {
+  document.getElementById('addWatchlistForm').style.display = 'block';
+  document.getElementById('addWatchlistBtn').style.display = 'none';
+  setTimeout(() => document.getElementById('newWatchlistCode').focus(), 50);
+}
+function hideAddWatchlistForm() {
+  document.getElementById('addWatchlistForm').style.display = 'none';
+  document.getElementById('addWatchlistBtn').style.display = 'block';
+  document.getElementById('newWatchlistCode').value = '';
+}
+async function submitAddWatchlist() {
+  const code = document.getElementById('newWatchlistCode').value.trim();
+  if (!/^\d{6}$/.test(code)) { document.getElementById('newWatchlistTip').textContent = '请输入6位股票代码'; return; }
+  try {
+    await fetch('/api/portfolio/watchlist', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code }) });
+    hideAddWatchlistForm();
+    await loadPortfolioWatchlist();
+  } catch(e) { document.getElementById('newWatchlistTip').textContent = '添加失败'; }
+}
+
+// 拖拽调宽
+(function initResizer() {
+  const panel    = document.getElementById('rightPanel');
+  const resizer  = document.getElementById('panelResizer');
+  if (!panel || !resizer) return;
+  let startX, startW;
+  resizer.addEventListener('mousedown', e => {
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    resizer.classList.add('dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  });
+  function onMove(e) {
+    const dx = startX - e.clientX;  // 左拉变宽
+    const newW = Math.max(280, Math.min(680, startW + dx));
+    panel.style.width = newW + 'px';
+    if (klineChart) klineChart.resize();
+  }
+  function onUp() {
+    resizer.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+})();
 
 // ── Settings 弹窗 ──────────────────────────────────────────────
 async function openSettings() {
