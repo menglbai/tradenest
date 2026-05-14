@@ -35,6 +35,55 @@ from tradenest.db.store import get_db
 router = APIRouter(prefix="/api/user", tags=["user"])
 
 
+# 转发新浪行情（避免浏览器跨域）
+@router.get("/watchlist/quotes")
+def watchlist_quotes(codes: str):
+    """服务端代取新浪行情。codes 逗号分隔的 6 位股票代码。"""
+    import requests
+    code_list = [c.strip() for c in codes.split(",") if c.strip()]
+    if not code_list:
+        return {"quotes": []}
+    
+    sym_list = []
+    for c in code_list:
+        if c.startswith("6"):
+            sym_list.append("sh" + c)
+        elif c.startswith("0") or c.startswith("3"):
+            sym_list.append("sz" + c)
+        elif c.startswith("4") or c.startswith("8"):
+            sym_list.append("bj" + c)
+        else:
+            sym_list.append("sh" + c)
+    
+    quotes = []
+    try:
+        url = f"https://hq.sinajs.cn/list={','.join(sym_list)}"
+        r = requests.get(url, headers={"Referer": "https://finance.sina.com.cn/"}, timeout=5)
+        for line in r.text.split("\n"):
+            if '"' not in line:
+                continue
+            key = line.split("=")[0].strip().replace("var hq_str_", "")
+            code = key[2:]
+            parts = line.split('"')[1].split(",")
+            if len(parts) < 10 or not parts[3] or float(parts[3] or 0) == 0:
+                quotes.append({"code": code, "name": "", "price": 0, "empty": True})
+                continue
+            name, open_p, prev, price = parts[0], float(parts[1]), float(parts[2]), float(parts[3])
+            high, low = float(parts[4]), float(parts[5])
+            amount = float(parts[9]) / 1e8
+            chg = round(price - prev, 2)
+            pct = round((price - prev) / prev * 100, 2) if prev else 0
+            quotes.append({
+                "code": code, "name": name,
+                "price": price, "open": open_p, "high": high, "low": low,
+                "chg": chg, "pct": pct, "amount_yi": round(amount, 2),
+                "up": chg >= 0,
+            })
+    except Exception as e:
+        return {"quotes": [], "error": str(e)}
+    return {"quotes": quotes}
+
+
 # ════════════════════════════════════════════════════════════════
 #  DB 初始化（建表）
 # ════════════════════════════════════════════════════════════════
