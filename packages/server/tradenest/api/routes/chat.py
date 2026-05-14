@@ -59,9 +59,14 @@ class ChatRequest(BaseModel):
     
     message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
     
+    session_id: str | None = Field(
+        default=None,
+        description="会话 ID（SQLite 持久化）。传入时自动从 DB 加载历史并存储消息。",
+    )
+
     history: list[HistoryMessage] = Field(
         default=[],
-        description="对话历史，最近 N 轮。前端维护，每次请求时传入。",
+        description="对话历史（前端内存维护）。session_id 存在时以 DB 为准，此字段忽略。",
     )
 
     task: str = Field(
@@ -130,8 +135,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 detail=f"未知 Provider: {request.provider_id}",
             )
 
-    # 拼接历史上下文
-    full_message = _build_message_with_history(request.message, request.history)
+    # 历史上下文：session_id 优先，否则用前端传入的 history
+    if request.session_id:
+        from tradenest.db import get_store
+        store = get_store()
+        db_history = store.get_messages_for_llm(request.session_id, limit=40)
+        full_message = _build_message_with_history(
+            request.message,
+            [HistoryMessage(role=m["role"], content=m["content"]) for m in db_history],
+        )
+    else:
+        full_message = _build_message_with_history(request.message, request.history)
 
     result = await run_agent(
         full_message,
@@ -146,7 +160,18 @@ async def chat(request: ChatRequest) -> ChatResponse:
     
     # 合规审查
     safe_text, check = safe_output(result.final_text, strict=settings.compliance_strict)
-    
+
+    # 写入 DB
+    if request.session_id:
+        from tradenest.db import get_store
+        store = get_store()
+        if store.get_session(request.session_id):
+            store.add_message(request.session_id, "user", request.message)
+            store.add_message(request.session_id, "assistant", safe_text)
+            # 第一条消息时自动用问题命名会话
+            if store.count_messages(request.session_id) == 2:
+                store.rename_session(request.session_id, request.message[:30])
+
     return ChatResponse(
         final_text=safe_text,
         rounds=result.rounds,
@@ -188,7 +213,17 @@ async def chat_stream(request: ChatRequest) -> EventSourceResponse:
     
     log.info("chat_stream_request", task=task.value, message_preview=request.message[:80])
 
-    full_message = _build_message_with_history(request.message, request.history)
+    # 历史上下文
+    if request.session_id:
+        from tradenest.db import get_store as _get_store
+        _store = _get_store()
+        db_history = _store.get_messages_for_llm(request.session_id, limit=40)
+        full_message = _build_message_with_history(
+            request.message,
+            [HistoryMessage(role=m["role"], content=m["content"]) for m in db_history],
+        )
+    else:
+        full_message = _build_message_with_history(request.message, request.history)
 
     async def event_generator() -> Any:
         """把 run_agent_stream 的事件转成 SSE 格式。"""
@@ -208,13 +243,22 @@ async def chat_stream(request: ChatRequest) -> EventSourceResponse:
                 if etype == "text_delta":
                     full_text_parts.append(event.get("text", ""))
                 
-                # complete 事件前做合规审查
+                # complete 事件前做合规审查、写入 DB
                 if etype == "complete":
                     final_text = event.get("final_text", "".join(full_text_parts))
                     safe_text, check = safe_output(final_text, strict=settings.compliance_strict)
                     event["final_text"] = safe_text
                     event["compliance_passed"] = check.passed
                     event["compliance_violations"] = check.violations
+                    # 写入 SQLite
+                    if request.session_id:
+                        from tradenest.db import get_store as _gs
+                        _s = _gs()
+                        if _s.get_session(request.session_id):
+                            _s.add_message(request.session_id, "user", request.message)
+                            _s.add_message(request.session_id, "assistant", safe_text)
+                            if _s.count_messages(request.session_id) == 2:
+                                _s.rename_session(request.session_id, request.message[:30])
                 
                 yield {
                     "event": etype,
