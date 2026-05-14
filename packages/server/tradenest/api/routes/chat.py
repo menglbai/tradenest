@@ -71,7 +71,7 @@ class ChatRequest(BaseModel):
     
     provider_id: str | None = Field(
         default=None,
-        description="显式指定 LLM Provider ID（如 'internal-xhs'），None 走路由表",
+        description="显式指定 LLM Provider ID（如 'gateway'），None 走路由表",
     )
     
     model: str | None = Field(
