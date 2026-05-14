@@ -34,12 +34,20 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from tradenest import __version__
 from tradenest.api.routes import chat as chat_routes
 from tradenest.api.routes import system as system_routes
+
+# 静态文件目录
+_STATIC_DIR = Path(__file__).parent.parent / "static"
 from tradenest.core.config import settings
 from tradenest.core.logging import get_logger, setup_logging
 from tradenest.llm.registry import get_registry
@@ -107,14 +115,21 @@ app.add_middleware(
 app.include_router(chat_routes.router)
 app.include_router(system_routes.router)
 
+# 静态文件（网页端）
+if _STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 # ============================================================
 # 根路径 / 健康检查
 # ============================================================
 
 @app.get("/")
-async def root() -> dict[str, str]:
-    """欢迎页"""
+async def root():
+    """根路径：如果 static/index.html 存在就返回网页，否则返回 JSON"""
+    index = _STATIC_DIR / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
     return {
         "name": "TradeNest",
         "version": __version__,
