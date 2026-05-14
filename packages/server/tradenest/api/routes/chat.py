@@ -48,11 +48,22 @@ log = get_logger("tradenest.api.chat")
 # 请求模型
 # ============================================================
 
+class HistoryMessage(BaseModel):
+    """对话历史中的单条消息"""
+    role: str = Field(..., description="user 或 assistant")
+    content: str = Field(..., description="消息内容")
+
+
 class ChatRequest(BaseModel):
     """对话请求体"""
     
     message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
     
+    history: list[HistoryMessage] = Field(
+        default=[],
+        description="对话历史，最近 N 轮。前端维护，每次请求时传入。",
+    )
+
     task: str = Field(
         default=TaskType.ANALYST.value,
         description="任务类型：simple_query / analyst / synthesis / socratic / summary",
@@ -118,9 +129,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 status_code=400,
                 detail=f"未知 Provider: {request.provider_id}",
             )
-    
+
+    # 拼接历史上下文
+    full_message = _build_message_with_history(request.message, request.history)
+
     result = await run_agent(
-        request.message,
+        full_message,
         task=task,
         provider=provider,
         model=request.model,
@@ -173,14 +187,16 @@ async def chat_stream(request: ChatRequest) -> EventSourceResponse:
             )
     
     log.info("chat_stream_request", task=task.value, message_preview=request.message[:80])
-    
+
+    full_message = _build_message_with_history(request.message, request.history)
+
     async def event_generator() -> Any:
         """把 run_agent_stream 的事件转成 SSE 格式。"""
         full_text_parts: list[str] = []
         
         try:
             async for event in run_agent_stream(
-                request.message,
+                full_message,
                 task=task,
                 provider=provider,
                 model=request.model,
@@ -212,3 +228,22 @@ async def chat_stream(request: ChatRequest) -> EventSourceResponse:
             }
     
     return EventSourceResponse(event_generator())
+
+
+# ============================================================
+# 内部辅助：历史上下文拼接
+# ============================================================
+
+def _build_message_with_history(message: str, history: list[HistoryMessage]) -> str:
+    """把对话历史拼接成上下文追加到当前消息前。"""
+    if not history:
+        return message
+    recent = history[-20:]  # 最多 10 轮（20 条）
+    lines = ["【对话历史（最近）】"]
+    for msg in recent:
+        role = "用户" if msg.role == "user" else "AI"
+        content = msg.content[:300].replace("\n", " ")
+        lines.append(f"{role}: {content}")
+    lines.append("【当前问题】")
+    lines.append(message)
+    return "\n".join(lines)
