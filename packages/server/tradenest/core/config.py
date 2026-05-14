@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     gateway_base_url: str = "http://codewiz.devops.xiaohongshu.com/llmadapter/anthropic"
     gateway_api_key: str = "Model authentication within the intranet does not require a key"
     gateway_default_model: str = "claude-4.6-sonnet-google"
-    gateway_extra_headers: str = '{"x-adapter-api-key":"jCJvIWUsyXpcoxdGe61e1yfJ2N8pL4ai","x-adapter-source":"tradenest","anthropic-version":"2023-06-01","Content-Type":"application/json"}'
+    gateway_extra_headers: str = '{"x-adapter-api-key":"","x-adapter-source":"tradenest","anthropic-version":"2023-06-01","Content-Type":"application/json"}'
     gateway_user_email: str = ""
 
     # Provider 2: 公网 Anthropic
