@@ -136,6 +136,9 @@ app.include_router(chart_routes.router)
 app.include_router(user_routes.router)
 app.include_router(settings_routes.router)
 
+from tradenest.api.routes import feed as feed_routes  # noqa: E402
+app.include_router(feed_routes.router)
+
 # 静态文件（网页端）
 if _STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
