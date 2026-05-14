@@ -18,7 +18,7 @@ env/
 uv.lock
 
 # Environment
-.env
+# .env  # 已改为提交默认空配置，key 在页面上填
 .env.local
 .env.*.local
 
