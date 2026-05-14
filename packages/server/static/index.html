@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradeNest — AI 投资研究助手</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3348;
+    --accent: #4f8ef7;
+    --accent2: #7c5cfc;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --user-bubble: #1e3a5f;
+    --ai-bubble: #1a1d27;
+    --tool-bg: #0f1923;
+    --radius: 12px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo { font-size: 22px; }
+  .title { font-size: 16px; font-weight: 700; color: var(--text); }
+  .subtitle { font-size: 12px; color: var(--text3); }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    margin-left: auto;
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .clear-btn {
+    background: none; border: 1px solid var(--border);
+    color: var(--text2); padding: 5px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 12px;
+    transition: all 0.2s;
+  }
+  .clear-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Chat area ── */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 0;
+    scroll-behavior: smooth;
+  }
+  .chat-area::-webkit-scrollbar { width: 4px; }
+  .chat-area::-webkit-scrollbar-track { background: transparent; }
+  .chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .message-wrap {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* ── Message bubble ── */
+  .message {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .message.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    background: var(--surface2);
+  }
+  .message.user .avatar { background: var(--user-bubble); }
+
+  .bubble {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.7;
+    background: var(--ai-bubble);
+    border: 1px solid var(--border);
+    word-break: break-word;
+  }
+  .message.user .bubble {
+    background: var(--user-bubble);
+    border-color: #1e4a8a;
+    color: #c8dcf8;
+  }
+
+  /* Markdown inside bubble */
+  .bubble h1, .bubble h2, .bubble h3 {
+    margin: 12px 0 6px; font-size: 15px; color: var(--accent);
+  }
+  .bubble p { margin: 6px 0; }
+  .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
+  .bubble li { margin: 3px 0; }
+  .bubble code {
+    background: var(--tool-bg); padding: 2px 6px;
+    border-radius: 4px; font-family: monospace; font-size: 13px;
+    color: #7dd3fc;
+  }
+  .bubble pre {
+    background: var(--tool-bg); padding: 12px;
+    border-radius: 8px; overflow-x: auto; margin: 8px 0;
+  }
+  .bubble pre code { background: none; padding: 0; }
+  .bubble table {
+    border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px;
+  }
+  .bubble th, .bubble td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+  }
+  .bubble th { background: var(--surface2); color: var(--accent); }
+  .bubble tr:hover { background: var(--surface2); }
+  .bubble strong { color: #93c5fd; }
+  .bubble em { color: var(--yellow); }
+  .bubble blockquote {
+    border-left: 3px solid var(--accent2);
+    padding: 4px 12px; margin: 8px 0;
+    color: var(--text2); font-style: italic;
+  }
+
+  /* ── Tool call indicator ── */
+  .tool-call {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--tool-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin: 6px 0;
+    font-size: 12px;
+    color: var(--text3);
+  }
+  .tool-call .tool-icon { color: var(--yellow); font-size: 14px; }
+  .tool-call.done { color: var(--text2); }
+  .tool-call.done .tool-icon { color: var(--green); }
+
+  /* ── Meta info ── */
+  .meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text3);
+    flex-wrap: wrap;
+  }
+  .meta span { display: flex; align-items: center; gap: 3px; }
+
+  /* ── Thinking indicator ── */
+  .thinking {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    color: var(--text3);
+    font-size: 13px;
+  }
+  .dots span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: bounce 1.2s infinite;
+    margin: 0 1px;
+  }
+  .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* ── Input area ── */
+  .input-area {
+    padding: 16px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .input-wrap {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: var(--font);
+    resize: none;
+    outline: none;
+    line-height: 1.5;
+    max-height: 160px;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text3); }
+
+  .send-btn {
+    width: 42px; height: 42px;
+    background: var(--accent);
+    border: none; border-radius: 10px;
+    color: white; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: #3b7de8; transform: scale(1.05); }
+  .send-btn:disabled { background: var(--border); cursor: not-allowed; transform: none; }
+
+  .hint { font-size: 11px; color: var(--text3); margin-top: 6px; text-align: center; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text3);
+    padding: 40px;
+    text-align: center;
+  }
+  .empty-state .big-icon { font-size: 48px; }
+  .empty-state h2 { font-size: 18px; color: var(--text2); }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+  .suggestions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center; margin-top: 12px;
+  }
+  .suggestion {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 8px 14px; border-radius: 20px;
+    font-size: 13px; cursor: pointer; color: var(--text2);
+    transition: all 0.2s;
+  }
+  .suggestion:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🪺</div>
+  <div>
+    <div class="title">TradeNest</div>
+    <div class="subtitle">AI 投资研究助手</div>
+  </div>
+  <button class="clear-btn" onclick="clearChat()">清空对话</button>
+  <div class="status-dot" id="statusDot" title="已连接"></div>
+</div>
+
+<div class="chat-area" id="chatArea">
+  <div class="message-wrap" id="messageWrap">
+    <div class="empty-state" id="emptyState">
+      <div class="big-icon">📊</div>
+      <h2>你好！我是 TradeNest</h2>
+      <p>你的 AI 投资研究助手<br>可以帮你分析行情、查资金流向、看宏观新闻</p>
+      <div class="suggestions">
+        <div class="suggestion" onclick="quickAsk(this)">贵州茅台今天怎么样？</div>
+        <div class="suggestion" onclick="quickAsk(this)">帮我看看外盘行情</div>
+        <div class="suggestion" onclick="quickAsk(this)">今天有什么重要政策新闻？</div>
+        <div class="suggestion" onclick="quickAsk(this)">宁德时代最近一个月走势</div>
+        <div class="suggestion" onclick="quickAsk(this)">现在A股整体资金面怎样？</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="input-area">
+  <div class="input-wrap">
+    <textarea id="input" placeholder="问我任何关于股票的问题… (Shift+Enter 换行，Enter 发送)" rows="1"
+      onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="发送">➤</button>
+  </div>
+  <div class="hint">支持多轮对话 · 实时行情数据 · AI 综合分析</div>
+</div>
+
+<script>
+// ── 状态 ──
+const history = [];   // [{role, content}]
+let isLoading = false;
+const BASE = '';      // 同域，相对路径
+
+// ── 工具函数 ──
+function $(id) { return document.getElementById(id); }
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+function scrollBottom() {
+  const area = $('chatArea');
+  area.scrollTop = area.scrollHeight;
+}
+
+function hideEmpty() {
+  const e = $('emptyState');
+  if (e) e.style.display = 'none';
+}
+
+function quickAsk(el) {
+  $('input').value = el.textContent;
+  sendMessage();
+}
+
+function clearChat() {
+  history.length = 0;
+  const wrap = $('messageWrap');
+  wrap.innerHTML = `<div class="empty-state" id="emptyState">
+    <div class="big-icon">📊</div>
+    <h2>对话已清空</h2>
+    <p>开始新的对话吧</p>
+  </div>`;
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function setLoading(v) {
+  isLoading = v;
+  $('sendBtn').disabled = v;
+  $('input').disabled = v;
+}
+
+// ── 添加消息 ──
+function addUserMessage(text) {
+  hideEmpty();
+  const wrap = $('messageWrap');
+  const el = document.createElement('div');
+  el.className = 'message user';
+  el.innerHTML = `
+    <div class="avatar">👤</div>
+    <div class="bubble">${escapeHtml(text)}</div>
+  `;
+  wrap.appendChild(el);
+  scrollBottom();
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function addThinking() {
+  hideEmpty();
+  const wrap = $('messageWrap');
+  const el = document.createElement('div');
+  el.className = 'message';
+  el.id = 'thinkingMsg';
+  el.innerHTML = `
+    <div class="avatar">🪺</div>
+    <div class="bubble">
+      <div class="thinking">
+        思考中 <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+  `;
+  wrap.appendChild(el);
+  scrollBottom();
+  return el;
+}
+
+function removeThinking() {
+  const el = $('thinkingMsg');
+  if (el) el.remove();
+}
+
+function addAiMessage() {
+  hideEmpty();
+  const wrap = $('messageWrap');
+  const el = document.createElement('div');
+  el.className = 'message';
+  const bubbleId = 'bubble_' + Date.now();
+  el.innerHTML = `
+    <div class="avatar">🪺</div>
+    <div>
+      <div class="bubble" id="${bubbleId}"></div>
+      <div class="meta" id="meta_${bubbleId}"></div>
+    </div>
+  `;
+  wrap.appendChild(el);
+  return { el, bubbleId };
+}
+
+function addToolCall(bubbleId, toolName, done=false) {
+  const bubble = $(bubbleId);
+  if (!bubble) return;
+  const id = 'tool_' + toolName.replace(/\W/g,'_') + '_' + Date.now();
+  const div = document.createElement('div');
+  div.className = 'tool-call' + (done ? ' done' : '');
+  div.id = id;
+  div.innerHTML = `<span class="tool-icon">${done ? '✅' : '⚙️'}</span> ${toolName}`;
+  bubble.appendChild(div);
+  scrollBottom();
+  return id;
+}
+
+function markToolDone(id) {
+  const el = $(id);
+  if (el) {
+    el.className = 'tool-call done';
+    el.querySelector('.tool-icon').textContent = '✅';
+  }
+}
+
+// ── 发送消息 ──
+async function sendMessage() {
+  if (isLoading) return;
+  const input = $('input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  setLoading(true);
+
+  addUserMessage(text);
+  history.push({ role: 'user', content: text });
+
+  const thinkEl = addThinking();
+
+  try {
+    const { el: aiEl, bubbleId } = addAiMessage();
+    removeThinking();
+
+    let fullText = '';
+    let toolIds = {};
+    let rounds = 0, durationMs = 0, inputTokens = 0, outputTokens = 0;
+
+    // 用 SSE 流式接口
+    const resp = await fetch(BASE + '/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        history: history.slice(0, -1),  // 不含当前问题（已在 message 里）
+      }),
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      // 解析 SSE 行
+      const lines = buf.split('\n');
+      buf = lines.pop();  // 最后一行可能不完整
+
+      let curEvent = null;
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          curEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ') && curEvent) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            handleEvent(curEvent, data, bubbleId, toolIds, (t) => {
+              fullText += t;
+              // 实时渲染 Markdown
+              $(bubbleId).innerHTML = marked.parse(fullText);
+              scrollBottom();
+            }, (stats) => {
+              rounds = stats.rounds;
+              durationMs = stats.duration_ms;
+              inputTokens = stats.total_input_tokens;
+              outputTokens = stats.total_output_tokens;
+            });
+          } catch(e) {}
+          curEvent = null;
+        }
+      }
+    }
+
+    // 渲染元信息
+    const meta = $('meta_' + bubbleId);
+    if (meta) {
+      meta.innerHTML = `
+        <span>🔄 ${rounds}轮</span>
+        <span>⏱ ${(durationMs/1000).toFixed(1)}s</span>
+        <span>📊 ${inputTokens}+${outputTokens} tokens</span>
+      `;
+    }
+
+    // 加入历史
+    if (fullText) {
+      history.push({ role: 'assistant', content: fullText });
+      // 只保留最近20条（10轮）
+      if (history.length > 20) history.splice(0, history.length - 20);
+    }
+
+  } catch(err) {
+    removeThinking();
+    const wrap = $('messageWrap');
+    const el = document.createElement('div');
+    el.className = 'message';
+    el.innerHTML = `
+      <div class="avatar">🪺</div>
+      <div class="bubble" style="color:#f87171">⚠️ 连接失败: ${escapeHtml(err.message)}<br><small>请确认后端服务已启动: uvicorn tradenest.main:app --reload</small></div>
+    `;
+    wrap.appendChild(el);
+  }
+
+  setLoading(false);
+  $('input').focus();
+  scrollBottom();
+}
+
+function handleEvent(type, data, bubbleId, toolIds, onText, onComplete) {
+  if (type === 'text_delta') {
+    onText(data.text || '');
+  } else if (type === 'tool_call_start') {
+    const name = data.name || 'tool';
+    const id = addToolCall(bubbleId, `调用 ${name}...`);
+    toolIds[name] = id;
+  } else if (type === 'tool_result') {
+    const name = data.tool_name || '';
+    if (toolIds[name]) markToolDone(toolIds[name]);
+  } else if (type === 'complete') {
+    onComplete(data);
+  }
+}
+
+// ── 检查后端连通性 ──
+async function checkHealth() {
+  try {
+    const r = await fetch(BASE + '/health');
+    if (r.ok) {
+      $('statusDot').style.background = 'var(--green)';
+      $('statusDot').title = '已连接';
+    } else {
+      throw new Error('not ok');
+    }
+  } catch {
+    $('statusDot').style.background = 'var(--red)';
+    $('statusDot').style.boxShadow = '0 0 6px var(--red)';
+    $('statusDot').title = '后端未连接';
+  }
+}
+
+// 启动时检查
+checkHealth();
+setInterval(checkHealth, 30000);
+
+// 自动聚焦
+$('input').focus();
+</script>
+</body>
+</html>
