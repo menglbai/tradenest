@@ -1623,8 +1623,8 @@ body.light {
   function renderPortfolioSummary() {
     const s = state.portfolio.summary || {};
     const mv = Number(s.total_market_value ?? s.market_value ?? 0);
-    const pnl = Number(s.total_pnl ?? s.pnl ?? 0);
-    const today = Number(s.today_pnl ?? s.daily_pnl ?? 0);
+    const pnl = Number(s.total_profit ?? s.total_pnl ?? s.pnl ?? 0);
+    const today = Number(s.today_profit ?? s.today_pnl ?? s.daily_pnl ?? 0);
     const fmt = (v) => (v >= 0 ? '+' : '') + v.toFixed(2);
     const cls = (v) => v >= 0 ? 'up' : 'down';
     $('#portfolio-summary').innerHTML = `
@@ -1652,12 +1652,12 @@ body.light {
     state.portfolio.positions.forEach(p => {
       const code = p.code || '';
       const name = p.name || code;
-      const price = Number(p.price ?? p.last_price ?? 0);
-      const chg = Number(p.pct_change ?? p.change ?? 0);
-      const avg = Number(p.avg_price ?? p.cost ?? 0);
-      const qty = Number(p.quantity ?? p.qty ?? 0);
-      const totalPnl = Number(p.total_pnl ?? p.pnl ?? 0);
-      const todayPnl = Number(p.today_pnl ?? 0);
+      const price = Number(p.current_price ?? p.price ?? p.last_price ?? p.quote?.price ?? 0);
+      const chg = Number(p.today_pct ?? p.pct_change ?? p.change ?? p.quote?.pct ?? 0);
+      const avg = Number(p.avg_cost ?? p.avg_price ?? p.cost ?? 0);
+      const qty = Number(p.total_shares ?? p.quantity ?? p.qty ?? 0);
+      const totalPnl = Number(p.total_profit ?? p.total_pnl ?? p.pnl ?? 0);
+      const todayPnl = Number(p.today_profit ?? p.today_pnl ?? 0);
       const chgCls = chg >= 0 ? 'up' : 'down';
       const pnlCls = totalPnl >= 0 ? 'up' : 'down';
       const todayCls = todayPnl >= 0 ? 'up' : 'down';
