@@ -354,7 +354,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 
 /* ───────────── RIGHT PANEL (可折叠) ───────────── */
 .right-panel {
-  width: 280px; flex-shrink: 0;
+  width: 380px; flex-shrink: 0;
   background: var(--sidebar); border-left: 1px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden;
 }
@@ -666,10 +666,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
           <button onclick="loadKline()" style="background:#4ade80;color:#000;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer">加载</button>
         </div>
         <div id="klinePeriodTabs" style="display:flex;gap:4px;margin-bottom:8px;background:#1a1a1a;border-radius:6px;padding:3px">
-          <button class="kline-period-btn active" data-period="daily"   data-days="60"  onclick="switchKlinePeriod(this)">日</button>
-          <button class="kline-period-btn"        data-period="daily"   data-days="120" onclick="switchKlinePeriod(this)">日·长</button>
-          <button class="kline-period-btn"        data-period="weekly"  data-days="60"  onclick="switchKlinePeriod(this)">周</button>
-          <button class="kline-period-btn"        data-period="monthly" data-days="36"  onclick="switchKlinePeriod(this)">月</button>
+          <button class="kline-period-btn active" data-period="daily"   data-days="120" onclick="switchKlinePeriod(this)">日</button>
+          <button class="kline-period-btn"        data-period="daily"   data-days="250" onclick="switchKlinePeriod(this)">日·长</button>
+          <button class="kline-period-btn"        data-period="weekly"  data-days="104" onclick="switchKlinePeriod(this)">周</button>
+          <button class="kline-period-btn"        data-period="monthly" data-days="60"  onclick="switchKlinePeriod(this)">月</button>
           <select id="klineAdjust" onchange="loadKline()" style="margin-left:auto;background:#0f0f0f;border:1px solid #333;border-radius:5px;padding:3px 6px;color:#aaa;font-size:11px">
             <option value="qfq" selected>前复权</option>
             <option value="hfq">后复权</option>
@@ -680,7 +680,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
           <div id="klineName" style="font-weight:600;color:#fff;margin-bottom:3px"></div>
           <div id="klineQuote" style="color:#aaa"></div>
         </div>
-        <div id="klineChart" style="width:100%;height:380px;"></div>
+        <div id="klineChart" style="width:100%;height:460px;"></div>
         <div id="klineEmpty" class="panel-empty">输入代码后点“加载”</div>
       </div>
     </div>
@@ -1167,9 +1167,20 @@ function switchTab(el) {
   document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   const tab = el.dataset.tab;
-  ['watchlist','news','global','kline'].forEach(t => {
-    document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
+  ['watchlist','alerts','news','global','kline'].forEach(t => {
+    const node = document.getElementById('tab-' + t);
+    if (node) node.style.display = t === tab ? '' : 'none';
   });
+  if (tab === 'news'   && !window._newsLoaded)  { window._newsLoaded = true;   loadNewsPanel(); }
+  if (tab === 'global' && !window._globalLoaded){ window._globalLoaded = true; loadGlobalPanel(); }
+  if (tab === 'kline'  && klineChart) klineChart.resize();
+}
+
+function switchKlinePeriod(btn) {
+  document.querySelectorAll('.kline-period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const code = document.getElementById('klineCode').value.trim();
+  if (code && /^\d{6}$/.test(code)) loadKline();
 }
 
 // ════════════════════════════════════════
