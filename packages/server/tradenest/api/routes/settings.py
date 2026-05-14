@@ -29,8 +29,9 @@ def get_db():
 # 默认配置项（key → 展示名/类型/说明）
 SETTINGS_META = {
     "gateway_base_url":      {"label": "LLM 网关地址",      "type": "text",     "placeholder": "https://api.anthropic.com 或内部网关地址"},
-    "gateway_api_key":       {"label": "网关 API Key",      "type": "password", "placeholder": "内部网关用 x-adapter-api-key，公网用 sk-ant-..."},
-    "gateway_source":        {"label": "来源标识",           "type": "text",     "placeholder": "tradenest"},
+    "gateway_cookie":        {"label": "网关 SSO Cookie",   "type": "password", "placeholder": "内网 codewiz 的 access-token 值（F12 Cookie 里复制）"},
+    "gateway_api_key":       {"label": "网关 API Key",      "type": "password", "placeholder": "公网 Anthropic 用 sk-ant-...；内网不需要"},
+    "gateway_source":        {"label": "来源标识",           "type": "text",     "placeholder": "openclaw"},
     "anthropic_api_key":     {"label": "Anthropic API Key", "type": "password", "placeholder": "sk-ant-xxxxxx（公网直连时填）"},
     "default_model":         {"label": "默认模型",           "type": "text",     "placeholder": "claude-4.6-sonnet-google"},
     "quote_sources":         {"label": "行情数据源优先级",   "type": "text",     "placeholder": "tencent,sina,ths"},
@@ -119,6 +120,11 @@ def _apply_to_env(key: str, value: str):
             headers = {}
         headers["x-adapter-api-key"] = value
         os.environ["TRADENEST_GATEWAY_EXTRA_HEADERS"] = _json.dumps(headers)
+        return
+    
+    if key == "gateway_cookie" and value:
+        # SSO Cookie：内网必须带上才能调通。存为独立环境变量，AnthropicProvider 会动态读。
+        os.environ["TRADENEST_GATEWAY_COOKIE"] = value
         return
 
     mapping = {
