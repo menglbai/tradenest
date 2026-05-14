@@ -584,3 +584,152 @@ def watch_to_position(code: str, req: BuyRequest):
     db.execute("DELETE FROM portfolio_watchlist WHERE code=?", (code,))
     db.commit()
     return result
+
+
+# ══════════════════════════════════════════════════════
+#  月度盈亏统计
+# ══════════════════════════════════════════════════════
+@router.get("/stats/monthly")
+def monthly_pnl():
+    """按月统计已实现盈亏（从交易流水计算）。"""
+    from tradenest.db.store import get_db
+    db = get_db()
+    trades = db.execute(
+        "SELECT t.type, t.date, t.price, t.shares, t.fee, p.avg_cost "
+        "FROM position_trades t JOIN positions p ON t.position_id=p.id "
+        "WHERE t.type='sell' ORDER BY t.date"
+    ).fetchall()
+
+    monthly: dict[str, float] = {}
+    for t in trades:
+        month = t["date"][:7]  # YYYY-MM
+        profit = round((t["price"] - t["price"]) * t["shares"] - t["fee"], 2)  # 简化：已存 realized_profit
+        monthly[month] = round(monthly.get(month, 0) + profit, 2)
+
+    # 改从 positions 的 realized_profit + updated_at 推算（更准确）
+    positions = db.execute(
+        "SELECT realized_profit, updated_at FROM positions WHERE realized_profit != 0"
+    ).fetchall()
+
+    import datetime
+    monthly2: dict[str, float] = {}
+    for p in positions:
+        if p["realized_profit"]:
+            month = datetime.datetime.fromtimestamp(p["updated_at"]).strftime("%Y-%m")
+            monthly2[month] = round(monthly2.get(month, 0) + p["realized_profit"], 2)
+
+    sorted_months = sorted(set(list(monthly.keys()) + list(monthly2.keys())))
+    return {
+        "months": sorted_months or [],
+        "values": [round(monthly2.get(m, 0), 2) for m in sorted_months],
+    }
+
+
+# ══════════════════════════════════════════════════════
+#  持仓收益曲线（模拟：按K线还原每日市值）
+# ══════════════════════════════════════════════════════
+@router.get("/stats/equity-curve")
+def equity_curve():
+    """返回近30天总持仓市值变化（用当日收盘价 × 持仓数量估算）。"""
+    from tradenest.db.store import get_db
+    import datetime, requests as _req
+    db = get_db()
+    positions = db.execute(
+        "SELECT code, total_shares, avg_cost FROM positions WHERE status='holding' AND total_shares>0"
+    ).fetchall()
+    if not positions:
+        return {"dates": [], "values": [], "cost_line": 0}
+
+    # 拉每只票近30日收盘价（同花顺）
+    today = datetime.date.today()
+    dates_set: set[str] = set()
+    price_map: dict[str, dict[str, float]] = {}  # code → {date → close}
+
+    for pos in positions:
+        code = pos["code"]
+        try:
+            import time as _time
+            start = (today - datetime.timedelta(days=40)).strftime("%Y%m%d")
+            url = f"https://d.10jqka.com.cn/v6/line/hs_{code}/01/{today.strftime('%Y%m%d')}.js"
+            r = _req.get(url, headers={"Referer": "https://stockpage.10jqka.com.cn/"}, timeout=8)
+            raw = r.text
+            if 'data' not in raw.lower():
+                continue
+            import re
+            m = re.search(r'"(\d{8}[^"]+)"', raw)
+            if not m:
+                continue
+            parts = m.group(1).split(";")
+            dm: dict[str, float] = {}
+            for entry in parts[-40:]:  # 近40天
+                fs = entry.split(",")
+                if len(fs) >= 2:
+                    d_str = fs[0]
+                    try:
+                        close = float(fs[1])
+                        if len(d_str) == 8:
+                            d_fmt = f"{d_str[:4]}-{d_str[4:6]}-{d_str[6:]}"
+                            dm[d_fmt] = close
+                            dates_set.add(d_fmt)
+                    except Exception:
+                        pass
+            price_map[code] = dm
+        except Exception:
+            pass
+
+    if not dates_set:
+        return {"dates": [], "values": [], "cost_line": 0}
+
+    sorted_dates = sorted(dates_set)[-30:]
+    total_cost = sum(p["avg_cost"] * p["total_shares"] for p in positions)
+    values = []
+    for date in sorted_dates:
+        mv = 0.0
+        for pos in positions:
+            p_map = price_map.get(pos["code"], {})
+            # 找最近有价格的日期
+            price = p_map.get(date)
+            if price is None:
+                # 找最近的
+                prev = [v for d, v in sorted(p_map.items()) if d <= date]
+                price = prev[-1] if prev else pos["avg_cost"]
+            mv += price * pos["total_shares"]
+        values.append(round(mv, 2))
+
+    return {"dates": sorted_dates, "values": values, "cost_line": round(total_cost, 2)}
+
+
+# ══════════════════════════════════════════════════════
+#  涨跌归因（今日各持仓对总盈亏的贡献）
+# ══════════════════════════════════════════════════════
+@router.get("/stats/attribution")
+def pnl_attribution():
+    """今日各持仓盈亏贡献（用于饼图）。"""
+    from tradenest.db.store import get_db
+    db = get_db()
+    positions = db.execute(
+        "SELECT code, name, total_shares FROM positions WHERE status='holding' AND total_shares>0"
+    ).fetchall()
+    if not positions:
+        return {"items": []}
+
+    codes = [p["code"] for p in positions]
+    quotes = _get_quotes(codes)
+
+    items = []
+    for p in positions:
+        q = quotes.get(p["code"], {})
+        price = q.get("price", 0)
+        prev  = q.get("prev_close", price)
+        pnl   = round((price - prev) * p["total_shares"], 2)
+        name  = q.get("name") or p["name"] or p["code"]
+        items.append({
+            "code":  p["code"],
+            "name":  name,
+            "pnl":   pnl,
+            "pct":   round(q.get("pct", 0), 2),
+            "shares": p["total_shares"],
+        })
+
+    items.sort(key=lambda x: abs(x["pnl"]), reverse=True)
+    return {"items": items}
