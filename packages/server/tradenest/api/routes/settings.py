@@ -109,9 +109,20 @@ def get_effective_settings():
 
 def _apply_to_env(key: str, value: str):
     """把 Settings DB 的值同步到进程环境变量，让当前运行立即生效"""
+    if key == "gateway_api_key" and value:
+        # 更新 EXTRA_HEADERS 里的 x-adapter-api-key
+        import json as _json
+        raw = os.environ.get("TRADENEST_GATEWAY_EXTRA_HEADERS", "{}")
+        try:
+            headers = _json.loads(raw)
+        except Exception:
+            headers = {}
+        headers["x-adapter-api-key"] = value
+        os.environ["TRADENEST_GATEWAY_EXTRA_HEADERS"] = _json.dumps(headers)
+        return
+
     mapping = {
         "gateway_base_url":  "TRADENEST_GATEWAY_BASE_URL",
-        "gateway_api_key":   "_TRADENEST_GATEWAY_API_KEY",   # 内部用，config 读取
         "anthropic_api_key": "ANTHROPIC_API_KEY",
         "default_model":     "TRADENEST_DEFAULT_MODEL",
         "quote_sources":     "TRADENEST_QUOTE_SOURCES",
