@@ -283,7 +283,9 @@ async def run_agent_stream(
     full_text_acc: list[str] = []
     tool_call_log: list[dict[str, Any]] = []
     last_stop = ""
-    
+    total_in = 0
+    total_out = 0
+
     log.info("agent_stream_start", task=task.value, message_preview=user_message[:80])
     
     for round_i in range(1, max_rounds + 1):
@@ -318,6 +320,10 @@ async def run_agent_stream(
                 
                 elif etype == "message_stop":
                     last_stop = event.get("stop_reason", "")
+                    # 累积 token 用量
+                    usage = event.get("usage", {})
+                    total_in += usage.get("input_tokens", 0)
+                    total_out += usage.get("output_tokens", 0)
         
         except Exception as e:
             log.error("agent_stream_llm_failed", round=round_i, error=str(e))
@@ -383,4 +389,6 @@ async def run_agent_stream(
         "tool_calls": tool_call_log,
         "duration_ms": duration_ms,
         "stop_reason": last_stop,
+        "total_input_tokens": total_in,
+        "total_output_tokens": total_out,
     }
