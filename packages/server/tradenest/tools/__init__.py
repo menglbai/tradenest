@@ -23,7 +23,7 @@ from tradenest.tools.base import (
 
 # 自动 import 子模块，触发 @register_tool 装饰器执行（注册到全局表）
 # 注意：新增工具模块必须在这里 import，否则装饰器不会执行，工具不会注册
-from tradenest.tools import market, news, mock, macro  # noqa: F401
+from tradenest.tools import market, news, mock, macro, sector  # noqa: F401
 
 __all__ = [
     "Tool",
