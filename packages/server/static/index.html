@@ -563,7 +563,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
     <div class="app-name">TradeNest</div>
     <div class="app-ver">v0.0.1</div>
   </div>
-  <div class="topbar-right" style="display:flex;align-items:center;gap:12px">
+  <div class="topbar-right" style="display:flex;align-items:center;gap:8px">
+    <button title="字体缩小" onclick="adjustFont(-1)" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:26px;height:26px;color:#94a3b8;cursor:pointer;font-size:13px">A-</button>
+    <button title="字体放大" onclick="adjustFont(1)"  style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:26px;height:26px;color:#94a3b8;cursor:pointer;font-size:13px">A+</button>
+    <button title="切换主题" onclick="toggleTheme()" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:26px;height:26px;color:#94a3b8;cursor:pointer;font-size:14px">🌗</button>
     <!-- 角色切换 -->
     <select id="roleSelect" onchange="switchRole(this.value)" style="background:#2a2a2a;color:#ccc;border:1px solid #444;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer">
       <option value="general">🔍 通用研究员</option>
@@ -700,6 +703,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
     <div class="session-list" id="sessionList"></div>
 
     <div class="sidebar-tools">
+      <!-- 搜索框 -->
+      <div style="position:relative;margin-bottom:8px">
+        <input id="globalSearch" type="text" placeholder="🔍 搜索股票…"
+          style="width:100%;box-sizing:border-box;background:#0d1525;border:1px solid #2a3a5c;border-radius:8px;padding:6px 10px;color:#e2e8f0;font-size:12px;outline:none"
+          oninput="onSearchInput(this.value)" onblur="setTimeout(()=>closeSearch(),200)">
+        <div class="search-drop" id="searchDrop" style="display:none" onmousedown="event.preventDefault()"></div>
+      </div>
       <button class="tool-btn" onclick="quickTool('market')">📊 市场行情速览</button>
       <button class="tool-btn" onclick="quickTool('news')">📰 宏观新闻</button>
       <button class="tool-btn" onclick="quickTool('flow')">💰 资金流向</button>
@@ -710,19 +720,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   <!-- MAIN -->
   <div class="main">
 
-
-    <!-- GLOBAL SEARCH BAR -->
-    <div style="padding:6px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-      <div class="search-wrap" style="flex:1;position:relative">
-        <input id="globalSearch" type="text" placeholder="🔍 搜索股票代码或名称…"
-          style="width:100%;box-sizing:border-box;background:#0d1525;border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text1);font-size:13px;outline:none"
-          oninput="onSearchInput(this.value)" onblur="setTimeout(()=>closeSearch(),200)">
-        <div class="search-drop" id="searchDrop" style="display:none" onmousedown="event.preventDefault()"></div>
-      </div>
-      <button title="字体缩小" onclick="adjustFont(-1)" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">A-</button>
-      <button title="字体放大" onclick="adjustFont(1)"  style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">A+</button>
-      <button title="切换主题" onclick="toggleTheme()" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">🌗</button>
-    </div>
 
     <!-- MARKET BAR -->
     <div class="market-bar">
