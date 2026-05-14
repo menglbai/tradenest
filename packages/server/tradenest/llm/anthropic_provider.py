@@ -9,7 +9,7 @@
 
 支持两种部署：
 1. **公网 Anthropic API**（api.anthropic.com）
-2. **小红书内部 codewiz 网关**（codewiz.devops.xiaohongshu.com/llmadapter/anthropic）
+2. **
 
 两者的 API 协议**完全一致**（都是 Anthropic 的 /v1/messages 接口），
 区别只在 base_url 和 headers——所以用同一个 Provider 实现。
@@ -17,8 +17,8 @@
 【代理能力】
 通过 ProviderConfig.base_url + headers 配置实现"应用层代理"：
 - 想走公网：base_url = https://api.anthropic.com
-- 想走内部：base_url = http://codewiz... + 加 x-adapter-* headers
-- 想走第三方代理（如 xhs-llm-proxy 在 18790 端口）：base_url = http://localhost:18790
+- 想走自定义网关：base_url = http://your-gateway + 配置认证 headers
+- 想走本地代理：base_url = http://localhost:18790
 
 【为什么不直接用 anthropic SDK】
 官方 SDK 对 base_url 支持有限（不能自由换协议），且不容易加自定义 headers。
@@ -53,9 +53,9 @@ class AnthropicProvider(LLMProvider):
     
     用法：
         cfg = ProviderConfig(
-            id="internal-xhs",
+            id="gateway",
             kind="anthropic",
-            base_url="http://codewiz.devops.xiaohongshu.com/llmadapter/anthropic",
+            base_url="http://<your-gateway-url>/llmadapter/anthropic",
             api_key="...",
             default_model="claude-4.6-sonnet-google",
             headers={"x-adapter-api-key": "...", ...},
@@ -68,7 +68,7 @@ class AnthropicProvider(LLMProvider):
         self.config = config
         # 创建 httpx client（保持长连接，复用更高效）
         # 关键：trust_env=False 避免误用环境变量里的代理
-        # 但要给内部网关让路：如果 base_url 是 .xiaohongshu.com，不走代理
+        # trust_env=False 避免误用系统代理环境变量
         self._client = httpx.AsyncClient(
             base_url=config.base_url.rstrip("/"),
             headers=config.headers,
