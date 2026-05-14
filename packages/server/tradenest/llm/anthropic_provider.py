@@ -81,18 +81,27 @@ class AnthropicProvider(LLMProvider):
         """
         headers = dict(self.config.headers)  # 先用启动时的默认
         
-        # 1. 从 Settings DB 读最新 key
+        # 1. 从 Settings DB 读最新凭证（key + cookie）
         try:
             import sqlite3, os
             db_path = os.path.expanduser("~/.tradenest/history.db")
             if os.path.exists(db_path):
                 conn = sqlite3.connect(db_path)
-                row = conn.execute(
-                    "SELECT value FROM settings WHERE key = 'gateway_api_key' AND value != ''"
-                ).fetchone()
+                rows = conn.execute(
+                    "SELECT key, value FROM settings WHERE key IN ('gateway_api_key','gateway_cookie') AND value != ''"
+                ).fetchall()
                 conn.close()
-                if row and row[0]:
-                    headers["x-adapter-api-key"] = row[0]
+                for k, v in rows:
+                    if not v:
+                        continue
+                    if k == 'gateway_api_key':
+                        headers["x-adapter-api-key"] = v
+                    elif k == 'gateway_cookie':
+                        # 支持两种填法：1) 只填 token 值 → 自动拼 Cookie；access-token-codewiz...=...
+                        #              2) 填完整 Cookie 字符串 → 原样使用
+                        if '=' not in v:
+                            v = f"access-token-codewiz.devops.xiaohongshu.com={v}"
+                        headers["Cookie"] = v
         except Exception:
             pass
         
