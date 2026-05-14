@@ -767,6 +767,22 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
             <div><div style="color:#666;font-size:10px">今日盈亏</div><div id="pf-today-profit" style="font-weight:600">—</div></div>
           </div>
         </div>
+
+        <!-- 图表区：收益曲线 + 涨跌归因 + 月度盈亏 -->
+        <div id="portfolioCharts" style="display:none">
+          <!-- 子 tab -->
+          <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+            <button class="chart-tab-btn active" onclick="switchChartTab('equity')" style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 8px;color:#94a3b8;font-size:11px;cursor:pointer">📈 收益曲线</button>
+            <button class="chart-tab-btn" onclick="switchChartTab('attribution')" style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 8px;color:#94a3b8;font-size:11px;cursor:pointer">🥧 涨跌归因</button>
+            <button class="chart-tab-btn" onclick="switchChartTab('monthly')" style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 8px;color:#94a3b8;font-size:11px;cursor:pointer">📊 月度盈亏</button>
+            <button class="chart-tab-btn" onclick="switchChartTab('calendar')" style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:6px;padding:5px 8px;color:#94a3b8;font-size:11px;cursor:pointer">📅 交易日历</button>
+          </div>
+          <div id="chart-equity" style="height:150px"><div id="equityChart"></div></div>
+          <div id="chart-attribution" style="display:none;height:150px"><div id="attrChart"></div></div>
+          <div id="chart-monthly" style="display:none;height:150px"><div id="monthlyChart"></div></div>
+          <div id="chart-calendar" style="display:none"><div id="calendarView"></div></div>
+        </div>
+
         <!-- 持仓列表 -->
         <div id="positionList"><div class="panel-empty">暂无持仓</div></div>
         <button id="addPosBtn" class="add-watch-btn" onclick="showAddPositionForm()" style="margin-top:8px">＋ 新建持仓</button>
@@ -1421,6 +1437,13 @@ async function loadKline() {
       <span style="color:${up?'#ef4444':'#22c55e'};margin-left:8px">${up?'+':''}${chg} (${up?'+':''}${pct}%)</span>
       <span style="color:#666;margin-left:10px;font-size:11px">${periodLabel} · ${d.days} 点${d._mock?' · mock':''}</span>
     `;
+    // 注入成本价（如果该股在持仓中）
+    try {
+      const pr = await fetch('/api/portfolio/positions');
+      const pd = await pr.json();
+      const pos = (pd.positions||[]).find(p => p.code === code);
+      if (pos) d._cost_price = pos.avg_cost;
+    } catch(e2) {}
     renderKline(d);
   } catch(e) {
     document.getElementById('klineEmpty').textContent = '加载失败: ' + e.message;
@@ -1508,10 +1531,25 @@ function renderKline(d) {
       { name:'MA20', type:'line', data:d.ma.ma20, smooth:true, symbol:'none', lineStyle:{width:1,color:'#22c55e'}, connectNulls:true },
       { name:'MA60', type:'line', data:d.ma.ma60, smooth:true, symbol:'none', lineStyle:{width:1,color:'#a855f7'}, connectNulls:true },
       { name:'成交量', type:'bar', xAxisIndex: 1, yAxisIndex: 1,
-        data: d.volumes.map((v, i) => ({ value: v, itemStyle: { color: volColors[i], opacity: 0.6 } })) }
-    ],
-  };
-  klineChart.setOption(option, true);
+        data: d.volumes.map((v, i) => ({ value: v, itemStyle: { color: volColors[i], opacity: 0.6 } })) },
+    ];
+
+    // ── 成本线标注（从持仓数据注入）──
+    if (d._cost_price) {
+      option.series[0].markLine = {
+        silent: true,
+        symbol: ['none','none'],
+        lineStyle: { color: '#f59e0b', width: 1.5, type: 'dashed' },
+        label: { formatter: `成本 ¥${d._cost_price}`, color: '#f59e0b', fontSize: 10, position: 'insideEndTop' },
+        data: [{ yAxis: d._cost_price }]
+      };
+    }
+
+    option.series = option.series;  // keep reference
+    const finalOption = option;
+    finalOption.series = option.series;
+
+  klineChart.setOption(finalOption, true);
 }
 
 window.addEventListener('resize', () => klineChart && klineChart.resize());
@@ -2420,6 +2458,190 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatMsgs = document.getElementById('chatMsgs');
   if (chatMsgs) observer.observe(chatMsgs, {childList: true});
 });
+</script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  图表子 tab 切换
+// ═══════════════════════════════════════════════════════
+function switchChartTab(name) {
+  document.querySelectorAll('.chart-tab-btn').forEach(b => {
+    b.style.background = '#1e293b'; b.style.color = '#94a3b8';
+  });
+  const active = document.querySelector(`.chart-tab-btn[onclick="switchChartTab('${name}')"]`);
+  if (active) { active.style.background = '#2563eb'; active.style.color = '#fff'; }
+  ['equity','attribution','monthly','calendar'].forEach(t => {
+    const el = document.getElementById('chart-' + t);
+    if (el) el.style.display = t === name ? '' : 'none';
+  });
+  if (name === 'equity')      loadEquityCurve();
+  if (name === 'attribution') loadAttribution();
+  if (name === 'monthly')     loadMonthlyPnl();
+  if (name === 'calendar')    loadTradeCalendar();
+}
+
+// ═══════════════════════════════════════════════════════
+//  收益曲线
+// ═══════════════════════════════════════════════════════
+let equityChart = null;
+async function loadEquityCurve() {
+  const el = document.getElementById('equityChart');
+  if (!el) return;
+  el.style.height = '140px'; el.style.width = '100%';
+  const r = await fetch('/api/portfolio/stats/equity-curve');
+  const d = await r.json();
+  if (!d.dates?.length) {
+    el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px">暂无数据</div>';
+    return;
+  }
+  if (!equityChart) equityChart = echarts.init(el, 'dark');
+  equityChart.resize();
+  equityChart.setOption({
+    backgroundColor: 'transparent',
+    animation: false,
+    grid: { left:40, right:8, top:10, bottom:24 },
+    xAxis: { type:'category', data:d.dates, axisLabel:{color:'#475569',fontSize:9,formatter:v=>v.slice(5)} },
+    yAxis: { type:'value', scale:true, axisLabel:{color:'#475569',fontSize:9} },
+    tooltip: { trigger:'axis', backgroundColor:'#0f172a', borderColor:'#334155', textStyle:{color:'#e2e8f0',fontSize:11} },
+    series: [
+      { type:'line', data:d.values, smooth:true, symbol:'none',
+        lineStyle:{color:'#3b82f6',width:2},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'#3b82f633'},{offset:1,color:'transparent'}]}},
+        markLine: d.cost_line ? { silent:true, symbol:['none','none'],
+          lineStyle:{color:'#f59e0b',width:1,type:'dashed'},
+          label:{formatter:`成本 ¥${(d.cost_line/10000).toFixed(1)}万`,color:'#f59e0b',fontSize:9},
+          data:[{yAxis:d.cost_line}] } : undefined
+      }
+    ]
+  }, true);
+}
+
+// ═══════════════════════════════════════════════════════
+//  涨跌归因饼图
+// ═══════════════════════════════════════════════════════
+let attrChart = null;
+async function loadAttribution() {
+  const el = document.getElementById('attrChart');
+  if (!el) return;
+  el.style.height = '140px'; el.style.width = '100%';
+  const r = await fetch('/api/portfolio/stats/attribution');
+  const d = await r.json();
+  if (!d.items?.length) {
+    el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px">暂无数据</div>';
+    return;
+  }
+  if (!attrChart) attrChart = echarts.init(el, 'dark');
+  attrChart.resize();
+  const pieData = d.items.map(item => ({
+    name: `${item.name}(${item.pct>0?'+':''}${item.pct}%)`,
+    value: Math.abs(item.pnl),
+    itemStyle: { color: item.pnl >= 0 ? '#ef4444' : '#22c55e' }
+  }));
+  attrChart.setOption({
+    backgroundColor: 'transparent',
+    animation: false,
+    tooltip: { trigger:'item', backgroundColor:'#0f172a', borderColor:'#334155',
+      textStyle:{color:'#e2e8f0',fontSize:11},
+      formatter: p => `${p.name}<br/>今日盈亏 ¥${d.items[p.dataIndex]?.pnl?.toFixed(2)||0}` },
+    legend: { orient:'vertical', right:0, top:'center', textStyle:{color:'#94a3b8',fontSize:10}, itemWidth:10 },
+    series: [{
+      type:'pie', radius:['35%','65%'], center:['38%','50%'],
+      data: pieData,
+      label:{show:false}, labelLine:{show:false}
+    }]
+  }, true);
+}
+
+// ═══════════════════════════════════════════════════════
+//  月度盈亏柱状图
+// ═══════════════════════════════════════════════════════
+let monthlyChart = null;
+async function loadMonthlyPnl() {
+  const el = document.getElementById('monthlyChart');
+  if (!el) return;
+  el.style.height = '140px'; el.style.width = '100%';
+  const r = await fetch('/api/portfolio/stats/monthly');
+  const d = await r.json();
+  if (!d.months?.length) {
+    el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:20px">暂无已实现盈亏</div>';
+    return;
+  }
+  if (!monthlyChart) monthlyChart = echarts.init(el, 'dark');
+  monthlyChart.resize();
+  monthlyChart.setOption({
+    backgroundColor: 'transparent',
+    animation: false,
+    grid: { left:48, right:8, top:10, bottom:28 },
+    xAxis: { type:'category', data:d.months, axisLabel:{color:'#475569',fontSize:9} },
+    yAxis: { type:'value', axisLabel:{color:'#475569',fontSize:9} },
+    tooltip: { trigger:'axis', backgroundColor:'#0f172a', borderColor:'#334155',
+      textStyle:{color:'#e2e8f0',fontSize:11},
+      formatter: p => `${p[0].name}<br/>盈亏 ¥${p[0].value?.toFixed(2)||0}` },
+    series: [{
+      type:'bar', data: d.values.map(v => ({
+        value: v,
+        itemStyle: { color: v >= 0 ? '#ef4444' : '#22c55e', borderRadius:3 }
+      }))
+    }]
+  }, true);
+}
+
+// ═══════════════════════════════════════════════════════
+//  交易日历
+// ═══════════════════════════════════════════════════════
+async function loadTradeCalendar() {
+  const el = document.getElementById('calendarView');
+  if (!el) return;
+
+  // 拉所有交易流水
+  const r = await fetch('/api/portfolio/positions');
+  const pd = await r.json();
+  if (!pd.positions?.length) { el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:16px">暂无持仓</div>'; return; }
+
+  const tradeMap = {}; // date → {buy, sell}
+  for (const pos of pd.positions) {
+    const dr = await fetch(`/api/portfolio/positions/${pos.id}`);
+    const dd = await dr.json();
+    for (const t of dd.trades||[]) {
+      if (!tradeMap[t.date]) tradeMap[t.date] = {buy:false,sell:false};
+      tradeMap[t.date][t.type] = true;
+    }
+  }
+
+  // 渲染本月日历
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const today = now.getDate();
+
+  let cal = `<div style="font-size:12px;color:#94a3b8;margin-bottom:8px;text-align:center">${year}年${month+1}月</div>`;
+  cal += '<div class="cal-grid">';
+  ['日','一','二','三','四','五','六'].forEach(d => {
+    cal += `<div class="cal-header">${d}</div>`;
+  });
+  for (let i=0; i<firstDay; i++) cal += '<div class="cal-cell"></div>';
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const tr = tradeMap[dateStr] || {};
+    let cls = 'cal-cell';
+    let title = '';
+    if (tr.buy && tr.sell) { cls += ' has-both'; title = '有买入和卖出'; }
+    else if (tr.buy)  { cls += ' has-buy';  title = '有买入'; }
+    else if (tr.sell) { cls += ' has-sell'; title = '有卖出'; }
+    if (d === today) cls += ' today';
+    cal += `<div class="${cls}" title="${title}">${d}${tr.buy||tr.sell ? '<br/><span style="font-size:8px">'+(tr.buy&&tr.sell?'买卖':tr.buy?'买':'卖')+'</span>':''}</div>`;
+  }
+  cal += '</div>';
+  cal += '<div style="margin-top:8px;display:flex;gap:12px;font-size:11px;color:#64748b">';
+  cal += '<span><span style="color:#4ade80">■</span> 买入</span>';
+  cal += '<span><span style="color:#f87171">■</span> 卖出</span>';
+  cal += '<span><span style="color:#facc15">■</span> 买卖</span>';
+  cal += '</div>';
+  el.innerHTML = cal;
+}
+
+// ── 在 loadPortfolio 完成后显示图表区 + 加载收益曲线 ──
+const _origLoadPortfolio = window.loadPortfolio;
 </script>
 </body>
 </html>
