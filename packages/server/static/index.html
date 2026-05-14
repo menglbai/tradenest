@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TradeNest — AI 投资研究助手</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <style>
 :root {
   --bg:        #0d0f18;
@@ -365,6 +366,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       <div class="panel-tab active" data-tab="watchlist" onclick="switchTab(this)">自选股</div>
       <div class="panel-tab" data-tab="news" onclick="switchTab(this)">快讯</div>
       <div class="panel-tab" data-tab="global" onclick="switchTab(this)">外盘</div>
+      <div class="panel-tab" data-tab="kline" onclick="switchTab(this)">K线</div>
     </div>
     <div class="panel-body" id="panelBody">
       <!-- 自选股 -->
@@ -382,6 +384,23 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       <div id="tab-global" style="display:none">
         <div id="globalPanel"><div class="panel-empty">点击下方加载外盘</div></div>
         <button class="add-watch-btn" onclick="loadGlobalPanel()">↻ 加载外盘行情</button>
+      </div>
+      <!-- K线图 -->
+      <div id="tab-kline" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <input id="klineCode" type="text" placeholder="股票代码 600519" maxlength="6"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;outline:none;"
+            onkeydown="if(event.key==='Enter')loadKline()">
+          <select id="klineDays" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;">
+            <option value="20">20日</option>
+            <option value="60" selected>60日</option>
+            <option value="120">120日</option>
+            <option value="250">250日</option>
+          </select>
+        </div>
+        <button class="add-watch-btn" onclick="loadKline()">▶ 加载 K 线图</button>
+        <div id="klineChart" style="width:100%;height:320px;margin-top:8px;"></div>
+        <div id="klineEmpty" class="panel-empty">Enter 股票代码后点加载</div>
       </div>
     </div>
   </div>
@@ -781,9 +800,109 @@ function switchTab(el) {
   document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   const tab = el.dataset.tab;
-  ['watchlist','news','global'].forEach(t => {
+  ['watchlist','news','global','kline'].forEach(t => {
     document.getElementById('tab-' + t).style.display = t === tab ? '' : 'none';
   });
+}
+
+// ════════════════════════════════════════
+//  K 线图
+// ════════════════════════════════════════
+let klineChart = null;
+
+async function loadKline() {
+  const code = document.getElementById('klineCode').value.trim();
+  const days  = document.getElementById('klineDays').value;
+  if (!code || !/^\d{6}$/.test(code)) {
+    document.getElementById('klineEmpty').textContent = '请输公6位股票代码';
+    return;
+  }
+  document.getElementById('klineEmpty').textContent = '加载中…';
+  document.getElementById('klineChart').style.display = 'none';
+  try {
+    const r = await fetch(`/api/chart/kline?code=${code}&days=${days}`);
+    const d = await r.json();
+    document.getElementById('klineEmpty').textContent = '';
+    document.getElementById('klineChart').style.display = 'block';
+    renderKline(d);
+  } catch(e) {
+    document.getElementById('klineEmpty').textContent = '加载失败: ' + e.message;
+  }
+}
+
+function renderKline(d) {
+  const el = document.getElementById('klineChart');
+  if (!klineChart) klineChart = echarts.init(el, 'dark');
+  klineChart.resize();
+
+  // 涋红白：涨红跌白（A 股惯例）
+  const upColor   = '#ef4444';
+  const downColor = '#22c55e';
+
+  const option = {
+    backgroundColor: 'transparent',
+    animation: true,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      backgroundColor: '#1e2340',
+      borderColor: '#252d4a',
+      textStyle: { color: '#e2e8f0', fontSize: 11 },
+      formatter(params) {
+        const k = params.find(p => p.seriesName === 'K线');
+        if (!k) return '';
+        const [o,c,l,h] = k.value;
+        const pct = d.pct_change[k.dataIndex] || 0;
+        const col = c >= o ? upColor : downColor;
+        return `<b>${d.dates[k.dataIndex]}</b><br/>
+          开 <span style="color:${col}">${o}</span>&nbsp;
+          收 <span style="color:${col}">${c}</span>&nbsp;
+          涨跌 <span style="color:${col}">${pct>0?'+':''}${pct}%</span><br/>
+          高 ${h}&nbsp; 低 ${l}`;
+      }
+    },
+    legend: {
+      data: ['K线','MA5','MA10','MA20'],
+      textStyle: { color: '#94a3b8', fontSize: 10 },
+      top: 0,
+    },
+    grid: [{ left: 50, right: 10, top: 30, bottom: 80 }],
+    xAxis: [{
+      type: 'category', data: d.dates,
+      axisLabel: { color: '#4b5a7a', fontSize: 9, rotate: 30,
+        formatter: v => v.slice(5) },
+      axisLine: { lineStyle: { color: '#252d4a' } },
+    }],
+    yAxis: [{
+      scale: true,
+      axisLabel: { color: '#4b5a7a', fontSize: 9 },
+      splitLine: { lineStyle: { color: '#1e2340' } },
+    }],
+    dataZoom: [
+      { type: 'inside', start: 60, end: 100 },
+      { type: 'slider', bottom: 0, height: 20, start: 60, end: 100,
+        labelFormatter: '',
+        borderColor: '#252d4a', backgroundColor: '#111420', fillerColor: '#1e2340',
+        handleStyle: { color: '#4f8ef7' },
+      }
+    ],
+    series: [
+      {
+        name: 'K线', type: 'candlestick',
+        data: d.ohlcv,
+        itemStyle: {
+          color: upColor, color0: downColor,
+          borderColor: upColor, borderColor0: downColor,
+        },
+      },
+      { name:'MA5',  type:'line', data: d.ma.ma5,  smooth:true, lineStyle:{width:1,color:'#f59e0b'}, symbol:'none', connectNulls:true },
+      { name:'MA10', type:'line', data: d.ma.ma10, smooth:true, lineStyle:{width:1,color:'#4f8ef7'}, symbol:'none', connectNulls:true },
+      { name:'MA20', type:'line', data: d.ma.ma20, smooth:true, lineStyle:{width:1,color:'#22c55e'}, symbol:'none', connectNulls:true },
+    ],
+  };
+  klineChart.setOption(option, true);
+  // 添加标题
+  document.getElementById('klineChart').title = `${d.name}(${d.code}) ${d.days}日K线${ d._mock ? ' [mock]' : '' }`;
 }
 
 // 自选股
