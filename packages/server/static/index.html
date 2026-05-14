@@ -318,8 +318,9 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       <button onclick="closeSettings()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">×</button>
     </div>
 
-    <div style="font-size:12px;color:#888;margin-bottom:16px;padding:10px;background:#2a2a2a;border-radius:6px">
-      💡 配置保存到本地数据库，优先级高于 .env 文件。密码类型字段留空表示不修改。
+    <div style="font-size:12px;color:#888;margin-bottom:16px;padding:10px;background:#2a2a2a;border-radius:6px;line-height:1.6">
+      💡 配置保存到本地数据库，优先级高于 .env 文件。<br>
+      ⚠️ <b style="color:#fbbf24">修改 LLM 配置后需重启服务才能生效</b>（行情数据源不需要）。密码类型字段留空表示不修改。
     </div>
 
     <!-- LLM 网关 -->
@@ -333,13 +334,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       </div>
       <div style="margin-bottom:10px">
         <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">网关 API Key <span style="color:#555">（场景A填，场景B留空）</span></label>
-        <input id="s-gateway-key" type="password" placeholder="留空=不修改，填新值=覆盖"
-          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+        <div style="display:flex;gap:6px">
+          <input id="s-gateway-key" type="password" placeholder="留空=不修改，填新值=覆盖"
+            style="flex:1;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+          <button type="button" onclick="togglePwd('s-gateway-key',this)" style="background:#333;border:1px solid #444;border-radius:6px;padding:0 10px;color:#aaa;cursor:pointer;font-size:13px;white-space:nowrap">👁️</button>
+        </div>
       </div>
       <div style="margin-bottom:10px">
         <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">Anthropic API Key <span style="color:#555">（场景B填 sk-ant-...，场景A留空）</span></label>
-        <input id="s-anthropic-key" type="password" placeholder="留空=不修改，填新值=覆盖"
-          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+        <div style="display:flex;gap:6px">
+          <input id="s-anthropic-key" type="password" placeholder="留空=不修改，填新值=覆盖"
+            style="flex:1;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+          <button type="button" onclick="togglePwd('s-anthropic-key',this)" style="background:#333;border:1px solid #444;border-radius:6px;padding:0 10px;color:#aaa;cursor:pointer;font-size:13px;white-space:nowrap">👁️</button>
+        </div>
       </div>
       <div style="margin-bottom:10px">
         <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">默认模型</label>
@@ -1252,6 +1259,13 @@ async function checkHealth() {
   } catch {
     dot.className='status-dot err'; txt.textContent='未连接';
   }
+}
+
+function togglePwd(inputId, btn) {
+  const el = document.getElementById(inputId);
+  const show = el.type === 'password';
+  el.type = show ? 'text' : 'password';
+  btn.textContent = show ? '🙈' : '👁️';
 }
 
 // ── Settings 弹窗 ──────────────────────────────────────────────
