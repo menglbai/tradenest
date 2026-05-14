@@ -519,6 +519,24 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
     body.light-theme .bubble.user { background:#2563eb; color:#fff; }
   </style>
 
+  <style>
+    .quick-action-bar {
+      position: absolute; right: 12px; bottom: 52px;
+      display: flex; flex-direction: column; gap: 5px; z-index: 20;
+    }
+    .qa-btn {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 1px solid #1e293b; background: #0d1525cc;
+      backdrop-filter: blur(8px); color: #e2e8f0;
+      font-size: 14px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s; padding: 0;
+    }
+    .qa-btn:hover { background: #1e3a5f; border-color: #3b82f6; transform: scale(1.12); }
+    .bubble-wrap.export-mode { cursor: pointer; }
+    .bubble-wrap.export-mode:hover { outline: 2px dashed #3b82f6; border-radius: 8px; }
+    .bubble-wrap.selected { outline: 2px solid #3b82f6 !important; background: #1e3a5f22; border-radius: 8px; }
+  </style>
 </head>
 <body>
 <canvas id="fx-canvas"></canvas>
@@ -718,13 +736,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 
 
       <!-- QUICK ACTIONS BAR -->
-      <div style="max-width:800px;margin:0 auto 6px;display:flex;gap:6px;flex-wrap:wrap;padding:0 4px">
-        <button class="quick-btn" onclick="triggerDiagnosis()">🩺 持仓诊断</button>
-        <button class="quick-btn" onclick="triggerSummary()">📝 对话摘要</button>
-        <button class="quick-btn" onclick="startExportMode()">📷 导出长图</button>
-        <button class="quick-btn" onclick="quickAsk2('帮我分析今天的持仓盈亏情况')">💰 今日盈亏</button>
-        <button class="quick-btn" onclick="quickAsk2('今日A股大盘行情如何，有哪些热点板块？')">📊 大盘分析</button>
-        <button class="quick-btn" onclick="quickAsk2('今天有什么重要的政策和财经新闻？')">📰 今日新闻</button>
+      <div class="quick-action-bar">
+        <button class="qa-btn" onclick="triggerDiagnosis()" title="持仓诊断">🩺</button>
+        <button class="qa-btn" onclick="triggerSummary()" title="对话摘要">📝</button>
+        <button class="qa-btn" onclick="startExportMode()" title="导出长图">📷</button>
+        <button class="qa-btn" onclick="quickAsk2('帮我分析今天的持仓盈亏情况')" title="今日盈亏">💰</button>
+        <button class="qa-btn" onclick="quickAsk2('今日A股大盘行情如何，有哪些热点板块？')" title="大盘分析">📊</button>
+        <button class="qa-btn" onclick="quickAsk2('今天有什么重要的政策和财经新闻？')" title="今日新闻">📰</button>
       </div>
 
       <!-- INPUT BAR -->
@@ -2234,28 +2252,48 @@ function closeSearch() {
   document.getElementById('searchDrop').style.display = 'none';
 }
 function onSelectStock(code, name) {
+  // 内联操作菜单，不弹框
+  const drop = document.getElementById('searchDrop');
+  drop.innerHTML = `
+    <div style="padding:10px 14px;border-bottom:1px solid #1e293b;background:#131f35">
+      <div style="color:#e2e8f0;font-size:13px;font-weight:600">${name}</div>
+      <div style="color:#64748b;font-size:11px">${code}</div>
+    </div>
+    <div class="search-item" onclick="addToWatchlistBySearch('${code}','${name}');closeSearch()">
+      <span class="si-name">👁 加入关注</span>
+    </div>
+    <div class="search-item" onclick="showKlineFor('${code}');closeSearch()">
+      <span class="si-name">📈 查看K线</span>
+    </div>
+    <div class="search-item" onclick="showAddPosForCode('${code}','${name}');closeSearch()">
+      <span class="si-name">💼 建立持仓</span>
+    </div>
+    <div class="search-item" onclick="quickAsk2('帮我分析一下 ${name}(${code}) 的投资价值和近期走势');closeSearch()">
+      <span class="si-name">🤖 AI 分析</span>
+    </div>
+  `;
+  drop.style.display = 'block';
+}
+function showKlineFor(code) {
   document.getElementById('globalSearch').value = '';
-  closeSearch();
-  // 弹出操作菜单
-  const action = confirm(`${name}(${code})
-
-点确定 → 加入关注
-点取消 → 直接看K线`);
-  if (action) {
-    addToWatchlistBySearch(code, name);
-  } else {
-    switchTab(document.querySelector('[data-tab="kline"]'));
-    document.getElementById('klineCode').value = code;
-    loadKline(code, currentKlinePeriod, currentKlineAdjust);
-  }
+  switchTab(document.querySelector('[data-tab="kline"]'));
+  const kc = document.getElementById('klineCode');
+  if (kc) { kc.value = code; loadKline(); }
+}
+function showAddPosForCode(code, name) {
+  document.getElementById('globalSearch').value = '';
+  switchTab(document.querySelector('[data-tab="positions"]'));
+  const pc = document.getElementById('posCode');
+  if (pc) { pc.value = code; showAddPositionForm(); }
 }
 async function addToWatchlistBySearch(code, name) {
   await fetch('/api/portfolio/watchlist', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({code, name})
   });
-  alert(`已添加 ${name}(${code}) 到关注列表`);
   loadWatchlistTab();
+  // 切到关注tab
+  switchTab(document.querySelector('[data-tab="watchlist"]'));
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2282,23 +2320,21 @@ let exportMode = false;
 function startExportMode() {
   exportMode = true;
   document.getElementById('exportToolbar').classList.add('active');
-  document.querySelectorAll('.bubble-wrap').forEach(el => {
-    el.classList.add('export-mode');
-    el.onclick = () => el.classList.toggle('selected');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox'; cb.className = 'msg-checkbox';
-    el.querySelector('.bubble')?.prepend(cb);
-  });
+  document.querySelectorAll('.bubble-wrap').forEach(el => el.classList.add('export-mode'));
 }
 function cancelExportMode() {
   exportMode = false;
   document.getElementById('exportToolbar').classList.remove('active');
   document.querySelectorAll('.bubble-wrap').forEach(el => {
     el.classList.remove('export-mode','selected');
-    el.onclick = null;
-    el.querySelectorAll('.msg-checkbox').forEach(c=>c.remove());
   });
 }
+// 事件委托：点击消息切换选中状态
+document.addEventListener('click', e => {
+  if (!exportMode) return;
+  const wrap = e.target.closest('#chatMsgs .bubble-wrap');
+  if (wrap) { e.stopPropagation(); wrap.classList.toggle('selected'); }
+}, true);
 async function doExport() {
   const selected = [...document.querySelectorAll('.bubble-wrap.selected')];
   const targets = selected.length > 0 ? selected : [...document.querySelectorAll('.bubble-wrap')];
