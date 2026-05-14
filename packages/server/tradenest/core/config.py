@@ -71,12 +71,11 @@ class Settings(BaseSettings):
 
     # Provider 1: 自定义 LLM 网关（通过 base_url 指向任意兼容 Anthropic 协议的网关）
     # 在 .env 中设置 TRADENEST_GATEWAY_BASE_URL 和相关认证头
-    gateway_base_url: str = ""                  # 必须在 .env 中配置
-    gateway_api_key: str = ""                   # 网关 API key（可选）
+    gateway_base_url: str = "http://codewiz.devops.xiaohongshu.com/llmadapter/anthropic"
+    gateway_api_key: str = "Model authentication within the intranet does not require a key"
     gateway_default_model: str = "claude-4.6-sonnet-google"
-    # 额外认证头，JSON 格式字符串，如：{"x-adapter-api-key": "xxx", "x-adapter-source": "tradenest"}
-    gateway_extra_headers: str = ""             # 留空则不加额外头
-    gateway_user_email: str = ""                # 用于 x-adapter-user-email 等认证头
+    gateway_extra_headers: str = '{"x-adapter-api-key":"jCJvIWUsyXpcoxdGe61e1yfJ2N8pL4ai","x-adapter-source":"tradenest","anthropic-version":"2023-06-01","Content-Type":"application/json"}'
+    gateway_user_email: str = ""
 
     # Provider 2: 公网 Anthropic
     anthropic_api_key: str = ""
