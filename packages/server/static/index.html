@@ -306,6 +306,73 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       <div class="status-dot" id="statusDot"></div>
       <span id="statusTxt">连接中</span>
     </div>
+    <button onclick="openSettings()" title="设置" style="background:none;border:1px solid #444;border-radius:6px;padding:3px 8px;font-size:14px;cursor:pointer;color:#ccc">⚙️</button>
+  </div>
+</div>
+
+<!-- Settings 弹窗 -->
+<div id="settingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1e1e1e;border:1px solid #333;border-radius:12px;padding:28px;width:520px;max-width:90vw;max-height:85vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h2 style="margin:0;font-size:16px">⚙️ 设置</h2>
+      <button onclick="closeSettings()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">×</button>
+    </div>
+
+    <div style="font-size:12px;color:#888;margin-bottom:16px;padding:10px;background:#2a2a2a;border-radius:6px">
+      💡 配置保存到本地数据库，优先级高于 .env 文件。密码类型字段留空表示不修改。
+    </div>
+
+    <!-- LLM 网关 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:#aaa;margin-bottom:10px;border-bottom:1px solid #333;padding-bottom:6px">🤖 LLM 配置</div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">网关地址</label>
+        <input id="s-gateway-url" type="text" placeholder="https://api.anthropic.com 或内部网关地址"
+          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+        <div style="font-size:11px;color:#666;margin-top:3px">场景A（内部网关）填内部地址；场景B（公网）填 https://api.anthropic.com</div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">网关 API Key <span style="color:#555">（场景A填，场景B留空）</span></label>
+        <input id="s-gateway-key" type="password" placeholder="留空=不修改，填新值=覆盖"
+          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">Anthropic API Key <span style="color:#555">（场景B填 sk-ant-...，场景A留空）</span></label>
+        <input id="s-anthropic-key" type="password" placeholder="留空=不修改，填新值=覆盖"
+          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">默认模型</label>
+        <input id="s-model" type="text" placeholder="claude-4.6-sonnet-google"
+          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+      </div>
+    </div>
+
+    <!-- 行情数据源 -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:#aaa;margin-bottom:10px;border-bottom:1px solid #333;padding-bottom:6px">📈 行情数据源</div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">优先级（逗号分隔）</label>
+        <input id="s-quote-sources" type="text" placeholder="tencent,sina,ths"
+          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+        <div style="font-size:11px;color:#666;margin-top:3px">可选：tencent / sina / ths / eastmoney（靠前的优先，失败自动降级）</div>
+      </div>
+    </div>
+
+    <!-- 网络代理 -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:600;color:#aaa;margin-bottom:10px;border-bottom:1px solid #333;padding-bottom:6px">🌐 网络代理（可选）</div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">HTTP/HTTPS 代理</label>
+        <input id="s-proxy" type="text" placeholder="http://127.0.0.1:7890（留空=不用代理）"
+          style="width:100%;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeSettings()" style="background:#333;border:none;border-radius:6px;padding:8px 18px;color:#ccc;cursor:pointer;font-size:13px">取消</button>
+      <button onclick="saveSettings()" style="background:#4ade80;border:none;border-radius:6px;padding:8px 18px;color:#000;cursor:pointer;font-size:13px;font-weight:600">💾 保存</button>
+    </div>
   </div>
 </div>
 
@@ -1186,6 +1253,65 @@ async function checkHealth() {
     dot.className='status-dot err'; txt.textContent='未连接';
   }
 }
+
+// ── Settings 弹窗 ──────────────────────────────────────────────
+async function openSettings() {
+  const modal = document.getElementById('settingsModal');
+  modal.style.display = 'flex';
+  // 加载当前生效配置
+  try {
+    const r = await fetch('/api/settings/effective');
+    const d = await r.json();
+    document.getElementById('s-gateway-url').value = d.gateway_base_url || '';
+    document.getElementById('s-model').value = d.default_model || '';
+    document.getElementById('s-quote-sources').value = d.quote_sources || '';
+    // key 类型：有值则显示占位符，用户不填表示不修改
+    if (d.has_gateway_key)   document.getElementById('s-gateway-key').placeholder = '已配置（留空=不修改）';
+    if (d.has_anthropic_key) document.getElementById('s-anthropic-key').placeholder = '已配置（留空=不修改）';
+  } catch(e) { console.error('load settings failed', e); }
+}
+
+function closeSettings() {
+  document.getElementById('settingsModal').style.display = 'none';
+}
+
+async function saveSettings() {
+  const settings = {
+    gateway_base_url: document.getElementById('s-gateway-url').value.trim(),
+    gateway_api_key:  document.getElementById('s-gateway-key').value,
+    anthropic_api_key:document.getElementById('s-anthropic-key').value,
+    default_model:    document.getElementById('s-model').value.trim(),
+    quote_sources:    document.getElementById('s-quote-sources').value.trim(),
+    http_proxy:       document.getElementById('s-proxy').value.trim(),
+  };
+  // 过滤空字段和占位符
+  const filtered = Object.fromEntries(
+    Object.entries(settings).filter(([k,v]) => v && v !== '········')
+  );
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: filtered })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      closeSettings();
+      // 显示成功提示
+      const tip = document.createElement('div');
+      tip.textContent = `✅ 设置已保存（更新了 ${d.updated.length} 项）`;
+      tip.style.cssText = 'position:fixed;top:20px;right:20px;background:#4ade80;color:#000;padding:10px 16px;border-radius:8px;font-size:13px;z-index:99999;font-weight:600';
+      document.body.appendChild(tip);
+      setTimeout(() => tip.remove(), 3000);
+    }
+  } catch(e) { alert('保存失败: ' + e.message); }
+}
+
+// 点居弹窗外部关闭
+document.addEventListener('click', e => {
+  const modal = document.getElementById('settingsModal');
+  if (e.target === modal) closeSettings();
+});
 </script>
 </body>
 </html>
