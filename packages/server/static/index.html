@@ -881,7 +881,7 @@ body.light {
       <div class="sidebar-section bottom">
         <div class="section-title">🔍 股票搜索</div>
         <div class="search-box">
-          <input type="text" class="search-input" id="search-input" placeholder="代码/简称/拼音" />
+          <input type="text" class="search-input" id="search-input" placeholder="代码/简称/拼音" autocomplete="off" name="stock-search-random" />
           <div class="search-dropdown" id="search-dropdown"></div>
         </div>
       </div>
@@ -1285,10 +1285,14 @@ body.light {
     state.currentSessionId = id;
     renderSessions();
     try {
-      const d = await api(`/api/sessions/${id}/messages`);
-      state.messages = d.messages || d.items || d || [];
+      const d = await api(`/api/sessions/${id}`);
+      state.messages = (d.messages || []).map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
       renderMessages();
     } catch (e) {
+      console.error('[switchSession]', e);
       state.messages = [];
       renderMessages();
     }
@@ -1608,8 +1612,8 @@ body.light {
       loadPortfolioSummary(),
       loadPositions(),
       loadPortfolioHistory(),
+      loadPortfolioCharts(),
     ]);
-    renderPortfolioChart();
   }
   async function loadPortfolioSummary() {
     try {
@@ -1705,6 +1709,17 @@ body.light {
       $('#history-list').innerHTML = '<div class="empty-state">无法加载</div>';
     }
   }
+  async function loadPortfolioCharts() {
+    try {
+      const [eq, attr, monthly] = await Promise.all([
+        api('/api/portfolio/stats/equity-curve?days=30').catch(() => ({})),
+        api('/api/portfolio/stats/attribution').catch(() => ({})),
+        api('/api/portfolio/stats/monthly').catch(() => ({})),
+      ]);
+      state.charts = { equity: eq, attribution: attr, monthly };
+    } catch(e) { state.charts = {}; }
+    renderPortfolioChart();
+  }
   function renderPortfolioChart() {
     const dom = $('#portfolio-chart');
     if (!state.portfolioChart) state.portfolioChart = echarts.init(dom);
@@ -1712,35 +1727,50 @@ body.light {
     const dark = !document.body.classList.contains('light');
     const txt = dark ? '#e6edf3' : '#1f2328';
     let option;
+    const charts = state.charts || {};
     if (type === 'curve') {
-      const xs = (state.portfolio.history || []).map(h => h.date || '');
-      const ys = (state.portfolio.history || []).map(h => Number(h.value || 0));
+      const eq = charts.equity || {};
+      const xs = eq.dates || [];
+      const ys = eq.values || [];
+      const cost = Number(eq.cost_line || 0);
       option = {
         backgroundColor: 'transparent',
         textStyle: { color: txt },
         tooltip: { trigger: 'axis' },
-        grid: { left: 40, right: 12, top: 24, bottom: 30 },
+        grid: { left: 50, right: 12, top: 24, bottom: 30 },
         xAxis: { type: 'category', data: xs.length ? xs : ['暂无数据'] },
-        yAxis: { type: 'value' },
-        series: [{ type: 'line', smooth: true, data: ys, areaStyle: { opacity: 0.2 }, lineStyle: { color: '#3b82f6' }, itemStyle: { color: '#3b82f6' } }]
+        yAxis: { type: 'value', scale: true },
+        series: [
+          { name: '总市值', type: 'line', smooth: true, data: ys, areaStyle: { opacity: 0.2 }, lineStyle: { color: '#3b82f6' }, itemStyle: { color: '#3b82f6' },
+            markLine: cost > 0 ? { symbol:'none', silent:true, data:[{ yAxis: cost, name:'总成本', label:{ formatter:'成本: '+cost.toFixed(2), color:'#f59e0b' }, lineStyle:{ color:'#f59e0b', type:'dashed' } }] } : undefined,
+          },
+        ]
       };
     } else if (type === 'pie') {
-      const data = (state.portfolio.positions || []).map(p => ({ name: p.name || p.code, value: Number(p.market_value || (p.price * p.quantity) || 0) }));
+      const items = (charts.attribution && charts.attribution.items) || [];
+      const data = items.map(it => ({ name: it.name || it.code, value: Math.abs(Number(it.pnl || 0)), itemStyle: { color: Number(it.pnl) >= 0 ? '#ef4444' : '#22c55e' } }));
       option = {
         backgroundColor: 'transparent',
         textStyle: { color: txt },
-        tooltip: { trigger: 'item' },
-        series: [{ type: 'pie', radius: ['40%','70%'], data: data.length ? data : [{name:'暂无',value:1}] }]
+        tooltip: { trigger: 'item', formatter: (p) => {
+          const it = items.find(x => (x.name || x.code) === p.name) || {};
+          return `${p.name}<br/>盈亏: ${(it.pnl||0).toFixed(2)}<br/>占比: ${p.percent}%`;
+        }},
+        legend: { bottom: 0, textStyle: { color: txt } },
+        series: [{ type: 'pie', radius: ['40%','70%'], data: data.length ? data : [{name:'暂无数据',value:1, itemStyle:{color:'#374151'}}] }]
       };
     } else if (type === 'bar') {
+      const m = charts.monthly || {};
+      const xs = m.months || [];
+      const ys = m.values || [];
       option = {
         backgroundColor: 'transparent',
         textStyle: { color: txt },
         tooltip: { trigger: 'axis' },
-        grid: { left: 40, right: 12, top: 24, bottom: 30 },
-        xAxis: { type: 'category', data: ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'] },
+        grid: { left: 50, right: 12, top: 24, bottom: 30 },
+        xAxis: { type: 'category', data: xs.length ? xs : ['暂无数据'] },
         yAxis: { type: 'value' },
-        series: [{ type: 'bar', data: [0,0,0,0,0,0,0,0,0,0,0,0], itemStyle: { color: '#8b5cf6' } }]
+        series: [{ type: 'bar', data: ys, itemStyle: { color: (p) => p.value >= 0 ? '#ef4444' : '#22c55e' } }]
       };
     } else { // calendar
       const today = new Date(); const year = today.getFullYear();
