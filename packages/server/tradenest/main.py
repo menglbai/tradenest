@@ -49,6 +49,7 @@ from tradenest.api.routes import market as market_routes
 from tradenest.api.routes import sessions as sessions_routes
 from tradenest.api.routes import tools as tools_routes
 from tradenest.api.routes import chart as chart_routes
+from tradenest.api.routes import user as user_routes
 
 # 静态文件目录
 _STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -80,6 +81,13 @@ async def lifespan(app: FastAPI):
     # 触发工具注册（已由 import 自动完成）
     from tradenest.tools import get_all_tools
     log.info("tools_ready", count=len(get_all_tools()))
+
+    # 初始化数据库表（sessions/messages/watchlist/alerts/settings）
+    from tradenest.db.store import init_db
+    from tradenest.api.routes.user import init_user_tables
+    init_db()
+    init_user_tables()
+    log.info("db_ready")
     
     yield
     
@@ -122,6 +130,7 @@ app.include_router(market_routes.router)
 app.include_router(sessions_routes.router)
 app.include_router(tools_routes.router)
 app.include_router(chart_routes.router)
+app.include_router(user_routes.router)
 
 # 静态文件（网页端）
 if _STATIC_DIR.exists():
