@@ -155,3 +155,54 @@ async def market_bar_global():
     """仅外盘行情。"""
     items = await _fetch_sina(GLOBAL_SYMBOLS)
     return {"items": items, "updated_at": time.time()}
+
+
+@router.get("/search")
+def search_stocks(q: str, limit: int = 8):
+    """股票搜索（代码/名称/拼音），返回匹配列表。"""
+    import requests as _req, re as _re
+    results = []
+    try:
+        # 新浪搜索接口（稳定可用）
+        r = _req.get(
+            f"https://suggest3.sinajs.cn/suggest/type=11&key={q}",
+            headers={"Referer": "https://finance.sina.com.cn/"},
+            timeout=8,
+        )
+        raw = r.text
+        # 格式: var suggestvalue="名称,11,代码,sh代码,...";
+        for item in raw.split(";"):
+            if 'suggestvalue' not in item:
+                continue
+            inner = item.split('"')[1] if '"' in item else ""
+            for part in inner.split("\n"):
+                cols = part.split(",")
+                if len(cols) >= 3:
+                    name, _, code = cols[0], cols[1], cols[2]
+                    if code and name and len(code) == 6 and code.isdigit():
+                        market = "沪A" if code.startswith("6") else ("深A" if code.startswith(("0","3")) else "北A")
+                        results.append({"code": code, "name": name, "pinyin": "", "market": market})
+                        if len(results) >= limit:
+                            break
+    except Exception:
+        pass
+
+    # 如果新浪没结果，用同花顺搜索
+    if not results:
+        try:
+            r2 = _req.get(
+                f"https://suggest.tonghuashun.com/suggest?q={q}&type=stock&count={limit}",
+                timeout=6
+            )
+            for item in r2.json():
+                code = item.get("code","")
+                results.append({
+                    "code": code,
+                    "name": item.get("name",""),
+                    "pinyin": item.get("pinyin",""),
+                    "market": "沪A" if code.startswith("6") else "深A",
+                })
+        except Exception:
+            pass
+
+    return {"results": results[:limit]}
