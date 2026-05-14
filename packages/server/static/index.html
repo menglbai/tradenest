@@ -457,7 +457,16 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
         <div style="font-size:11px;color:#666;margin-top:3px">场景A（内部网关）填内部地址；场景B（公网）填 https://api.anthropic.com</div>
       </div>
       <div style="margin-bottom:10px">
-        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">网关 API Key <span style="color:#555">（场景A填，场景B留空）</span></label>
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">🍪 网关 SSO Cookie <span style="color:#fbbf24">（本机访问内网网关必填）</span></label>
+        <div style="display:flex;gap:6px">
+          <input id="s-gateway-cookie" type="password" placeholder="F12 Cookie 里复制 access-token-codewiz... 的值"
+            style="flex:1;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
+          <button type="button" onclick="togglePwd('s-gateway-cookie',this)" style="background:#333;border:1px solid #444;border-radius:6px;padding:0 10px;color:#aaa;cursor:pointer;font-size:13px;white-space:nowrap">👁️</button>
+        </div>
+        <div style="font-size:11px;color:#666;margin-top:3px">浏览器登录 codewiz 后，F12 → Application → Cookies 复制 <code style="color:#888">access-token-codewiz.devops.xiaohongshu.com</code> 的值。每天可能需要刷新。</div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:12px;color:#999;display:block;margin-bottom:4px">网关 API Key <span style="color:#555">（公网 Anthropic 用，内网走 Cookie 时留空）</span></label>
         <div style="display:flex;gap:6px">
           <input id="s-gateway-key" type="password" placeholder="留空=不修改，填新值=覆盖"
             style="flex:1;box-sizing:border-box;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:7px 10px;color:#eee;font-size:12px">
@@ -1485,8 +1494,9 @@ async function openSettings() {
     document.getElementById('s-model').value = d.default_model || '';
     document.getElementById('s-quote-sources').value = d.quote_sources || '';
     // key 类型：有值则显示占位符，用户不填表示不修改
-    if (d.has_gateway_key)   document.getElementById('s-gateway-key').placeholder = '已配置（留空=不修改）';
-    if (d.has_anthropic_key) document.getElementById('s-anthropic-key').placeholder = '已配置（留空=不修改）';
+    if (d.has_gateway_key)    document.getElementById('s-gateway-key').placeholder = '已配置（留空=不修改）';
+    if (d.has_anthropic_key)  document.getElementById('s-anthropic-key').placeholder = '已配置（留空=不修改）';
+    if (d.has_gateway_cookie) document.getElementById('s-gateway-cookie').placeholder = '已配置（留空=不修改）';
   } catch(e) { console.error('load settings failed', e); }
 }
 
@@ -1496,12 +1506,13 @@ function closeSettings() {
 
 async function saveSettings() {
   const settings = {
-    gateway_base_url: document.getElementById('s-gateway-url').value.trim(),
-    gateway_api_key:  document.getElementById('s-gateway-key').value,
-    anthropic_api_key:document.getElementById('s-anthropic-key').value,
-    default_model:    document.getElementById('s-model').value.trim(),
-    quote_sources:    document.getElementById('s-quote-sources').value.trim(),
-    http_proxy:       document.getElementById('s-proxy').value.trim(),
+    gateway_base_url:  document.getElementById('s-gateway-url').value.trim(),
+    gateway_cookie:    document.getElementById('s-gateway-cookie').value.trim(),
+    gateway_api_key:   document.getElementById('s-gateway-key').value,
+    anthropic_api_key: document.getElementById('s-anthropic-key').value,
+    default_model:     document.getElementById('s-model').value.trim(),
+    quote_sources:     document.getElementById('s-quote-sources').value.trim(),
+    http_proxy:        document.getElementById('s-proxy').value.trim(),
   };
   // 过滤空字段和占位符
   const filtered = Object.fromEntries(
