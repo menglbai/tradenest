@@ -102,8 +102,9 @@ def get_effective_settings():
         "gateway_base_url": db_values.get("gateway_base_url") or cfg.gateway_base_url,
         "default_model":    db_values.get("default_model")    or cfg.gateway_default_model,
         "quote_sources":    db_values.get("quote_sources")    or cfg.quote_sources,
-        "has_gateway_key":  bool(db_values.get("gateway_api_key")),
-        "has_anthropic_key":bool(db_values.get("anthropic_api_key")),
+        "has_gateway_key":   bool(db_values.get("gateway_api_key")),
+        "has_gateway_cookie":bool(db_values.get("gateway_cookie")),
+        "has_anthropic_key": bool(db_values.get("anthropic_api_key")),
         "source": "db+env",
     }
 
