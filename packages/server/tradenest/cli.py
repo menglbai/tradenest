@@ -13,6 +13,10 @@
 - 给不熟悉 web 的用户一个简单入口
 
 【用法】
+    # 多轮交互对话（推荐！AI 会记住上下文）
+    uv run python -m tradenest.cli chat
+    uv run python -m tradenest.cli chat --stream   # 流式输出版
+
     # 单条问话
     uv run python -m tradenest.cli ask "贵州茅台多少钱？"
     
@@ -198,6 +202,185 @@ async def _ask_stream(
 
 
 # ============================================================
+# 子命令：chat（多轮交互模式）
+# ============================================================
+
+async def cmd_chat(args: argparse.Namespace) -> int:
+    """多轮交互对话，在内存里保持对话历史。"""
+    setup_logging()
+
+    # 解析 Provider
+    provider = None
+    if args.provider:
+        try:
+            provider = get_registry().get(args.provider)
+        except KeyError as e:
+            console.print(f"[red]✗ {e}[/red]")
+            return 2
+
+    try:
+        task = TaskType(args.task)
+    except ValueError:
+        console.print(f"[red]✗ 未知任务类型: {args.task}[/red]")
+        return 2
+
+    console.print(Panel(
+        f"[bold cyan]🪺 TradeNest[/bold cyan] v{__version__} — 多轮对话模式\n"
+        f"[dim]输入问题后回车 | 输入 [bold]exit[/bold] 或 [bold]quit[/bold] 退出 | Ctrl+C 强制退出[/dim]\n"
+        f"[dim]输入 [bold]clear[/bold] 清空对话历史 | 输入 [bold]history[/bold] 查看历史[/dim]",
+        border_style="cyan",
+    ))
+
+    # 对话历史（内存）：[{"role": "user"|"assistant", "content": str}]
+    history: list[dict] = []
+
+    while True:
+        # 读取输入
+        try:
+            console.print("[bold cyan]You >[/bold cyan] ", end="")
+            user_input = input().strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[yellow]退出[/yellow]")
+            break
+
+        if not user_input:
+            continue
+
+        # 内置指令
+        if user_input.lower() in ("exit", "quit", "bye", "q"):
+            console.print("[yellow]再见！[/yellow]")
+            break
+
+        if user_input.lower() == "clear":
+            history.clear()
+            console.print("[dim]✓ 对话历史已清空[/dim]")
+            continue
+
+        if user_input.lower() == "history":
+            if not history:
+                console.print("[dim]（暂无历史）[/dim]")
+            else:
+                for i, msg in enumerate(history):
+                    role = "You" if msg["role"] == "user" else "AI"
+                    preview = msg["content"][:100].replace("\n", " ")
+                    console.print(f"[dim]{i+1}. [{role}] {preview}...[/dim]")
+            continue
+
+        # 追加用户消息到历史
+        history.append({"role": "user", "content": user_input})
+
+        # 调用 Agent（带上完整历史）
+        if args.stream:
+            assistant_text = await _chat_stream(user_input, history[:-1], task, provider, args.model)
+        else:
+            assistant_text = await _chat_blocking(user_input, history[:-1], task, provider, args.model)
+
+        if assistant_text:
+            history.append({"role": "assistant", "content": assistant_text})
+
+    return 0
+
+
+async def _chat_blocking(
+    message: str,
+    history: list[dict],
+    task: TaskType,
+    provider,
+    model: str | None,
+) -> str:
+    """多轮非流式：把历史拼进 system/user 消息传给 Agent。"""
+    # 把历史格式化成上下文字符串追加到 message 前面
+    # Agent loop 目前接收单条 message，用这个简单方案先跑通多轮
+    full_message = _build_message_with_history(message, history)
+
+    with console.status("[cyan]思考中...[/cyan]"):
+        result = await run_agent(
+            full_message,
+            task=task,
+            provider=provider,
+            model=model,
+        )
+
+    if result.error:
+        console.print(f"[red]✗ {result.error}[/red]")
+        return ""
+
+    safe_text, check = safe_output(result.final_text, strict=False)
+
+    console.print()
+    console.print(f"[bold green]AI >[/bold green]")
+    console.print(Markdown(safe_text))
+    console.print(f"[dim]({result.rounds}轮 {len(result.tool_calls)}次工具 {result.duration_ms:.0f}ms)[/dim]")
+    console.print()
+
+    return result.final_text
+
+
+async def _chat_stream(
+    message: str,
+    history: list[dict],
+    task: TaskType,
+    provider,
+    model: str | None,
+) -> str:
+    """多轮流式。"""
+    full_message = _build_message_with_history(message, history)
+    collected: list[str] = []
+
+    console.print(f"[bold green]AI >[/bold green]")
+    try:
+        async for event in run_agent_stream(
+            full_message,
+            task=task,
+            provider=provider,
+            model=model,
+        ):
+            etype = event.get("type")
+            if etype == "text_delta":
+                delta = event.get("text", "")
+                collected.append(delta)
+                console.print(delta, end="", soft_wrap=True)
+            elif etype == "tool_call_start":
+                console.print(f"\n[dim]🔧 {event.get('name')}...[/dim]", end="")
+            elif etype == "tool_result":
+                preview = (event.get("content_preview") or "")[:80]
+                console.print(f" ✓[/dim]")
+            elif etype == "complete":
+                console.print()
+                t = event.get('duration_ms', 0)
+                console.print(f"[dim]({event.get('rounds',1)}轮 {t:.0f}ms)[/dim]")
+            elif etype == "error":
+                console.print(f"\n[red]✗ {event.get('message')}[/red]")
+                return ""
+    except KeyboardInterrupt:
+        console.print("\n[yellow]中断[/yellow]")
+
+    console.print()
+    return "".join(collected)
+
+
+def _build_message_with_history(message: str, history: list[dict]) -> str:
+    """
+    把对话历史拼成上下文，追加到当前消息前。
+    格式简洁，让 LLM 能理解上下文但不占太多 token。
+    """
+    if not history:
+        return message
+
+    # 只取最近 10 轮（避免太长）
+    recent = history[-20:]  # 20条 = 10轮
+    ctx_lines = ["【对话历史（最近）】"]
+    for msg in recent:
+        role = "用户" if msg["role"] == "user" else "AI"
+        # 每条最多取 300 字符，避免 token 爆炸
+        content = msg["content"][:300].replace("\n", " ")
+        ctx_lines.append(f"{role}: {content}")
+    ctx_lines.append("【当前问题】")
+    ctx_lines.append(message)
+    return "\n".join(ctx_lines)
+
+
+# ============================================================
 # 子命令：info
 # ============================================================
 
@@ -269,8 +452,15 @@ def build_parser() -> argparse.ArgumentParser:
     
     sub = parser.add_subparsers(dest="cmd", required=True)
     
+    # chat（多轮交互，主推）
+    chat = sub.add_parser("chat", help="多轮交互对话（推荐）")
+    chat.add_argument("--task", default=TaskType.ANALYST.value, help="任务类型")
+    chat.add_argument("--provider", default=None, help="指定 Provider ID")
+    chat.add_argument("--model", default=None, help="指定模型")
+    chat.add_argument("--stream", action="store_true", help="流式输出")
+
     # ask
-    ask = sub.add_parser("ask", help="问 AI 一个问题")
+    ask = sub.add_parser("ask", help="单次问答（无上下文）")
     ask.add_argument("message", help="你的问题")
     ask.add_argument("--task", default=TaskType.ANALYST.value, help="任务类型")
     ask.add_argument("--provider", default=None, help="指定 Provider ID")
@@ -292,6 +482,7 @@ def main() -> None:
     args = parser.parse_args()
     
     handlers = {
+        "chat": cmd_chat,
         "ask": cmd_ask,
         "info": cmd_info,
         "health": cmd_health,
