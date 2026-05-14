@@ -187,3 +187,19 @@ class SessionStore:
 def get_store() -> SessionStore:
     """全局单例 Store（进程内复用）。"""
     return SessionStore()
+
+
+def get_db() -> sqlite3.Connection:
+    """获取原始 sqlite3 连接（用于 sessions/messages 以外的表）。
+
+    调用方负责 commit()；连接复用同一个 DB 文件（~/.tradenest/history.db）。
+    """
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    """初始化核心表（幂等，供 lifespan 调用）。"""
+    get_store()  # 触发 SessionStore._init_db()
