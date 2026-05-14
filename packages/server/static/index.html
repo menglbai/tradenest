@@ -435,6 +435,90 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
 .msg-row { animation: fadeUp .18s ease; }
 </style>
+
+  <!-- html2canvas for export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    /* 搜索下拉 */
+    .search-wrap { position:relative; }
+    .search-drop { position:absolute; top:100%; left:0; right:0; background:#1a2236; border:1px solid #2a3a5c;
+      border-radius:8px; z-index:999; max-height:280px; overflow-y:auto; box-shadow:0 8px 24px #0008; }
+    .search-item { padding:10px 14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+    .search-item:hover { background:#243050; }
+    .search-item .si-name { color:#e2e8f0; font-size:13px; }
+    .search-item .si-code { color:#64748b; font-size:12px; font-family:monospace; }
+    .search-item .si-mkt  { color:#3b82f6; font-size:11px; }
+
+    /* 消息收藏星标 */
+    .msg-star { opacity:0; cursor:pointer; font-size:14px; transition:.2s; color:#94a3b8; padding:2px 6px;
+      border-radius:4px; border:none; background:none; }
+    .msg-star:hover { color:#f59e0b; }
+    .msg-star.starred { opacity:1!important; color:#f59e0b; }
+    .bubble-wrap:hover .msg-star { opacity:1; }
+
+    /* 导出长图按钮 */
+    .export-btn { position:absolute; top:8px; right:8px; opacity:0; transition:.2s;
+      background:#1e3a5f; border:1px solid #2a5a8f; border-radius:6px;
+      padding:4px 10px; font-size:11px; color:#7dd3fc; cursor:pointer; }
+    .bubble-wrap:hover .export-btn { opacity:1; }
+
+    /* 工具栏（导出选择模式） */
+    .export-toolbar { display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      background:#1a2236; border:1px solid #2a3a5c; border-radius:12px;
+      padding:12px 20px; gap:12px; z-index:900; box-shadow:0 8px 32px #0009;
+      align-items:center; }
+    .export-toolbar.active { display:flex; }
+    .export-toolbar button { background:#2563eb; border:none; border-radius:8px;
+      padding:8px 16px; color:#fff; cursor:pointer; font-size:13px; font-weight:600; }
+    .export-toolbar button.cancel { background:#374151; }
+
+    /* 选中消息 */
+    .bubble-wrap.selected { background:#1e3a5f33; border-radius:8px; }
+    .bubble-wrap.export-mode { cursor:pointer; }
+    .msg-checkbox { display:none; margin-right:8px; accent-color:#2563eb; width:16px; height:16px; }
+    .export-mode .msg-checkbox { display:inline-block; }
+
+    /* 快捷键提示 */
+    .kbd-hint { display:inline-block; background:#1e293b; border:1px solid #334155;
+      border-radius:4px; padding:1px 6px; font-size:11px; font-family:monospace; color:#94a3b8; }
+
+    /* 字体大小控制 */
+    .font-ctrl { display:flex; align-items:center; gap:6px; }
+    .font-ctrl button { background:#1e293b; border:1px solid #334155; border-radius:6px;
+      width:28px; height:28px; color:#94a3b8; cursor:pointer; font-size:15px; }
+    .font-ctrl button:hover { background:#2d3f5c; color:#e2e8f0; }
+
+    /* 持仓诊断报告 */
+    .diagnosis-btn { width:100%; background:linear-gradient(135deg,#1e40af,#7c3aed);
+      border:none; border-radius:10px; padding:12px; color:#fff; font-size:14px;
+      font-weight:600; cursor:pointer; letter-spacing:.5px; transition:.2s; }
+    .diagnosis-btn:hover { opacity:.9; transform:translateY(-1px); }
+
+    /* 月度盈亏图 */
+    #pnlChart { width:100%; height:160px; }
+
+    /* 交易日历 */
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; font-size:11px; }
+    .cal-cell { padding:4px 2px; text-align:center; border-radius:4px; cursor:default; min-height:32px; }
+    .cal-cell.has-buy  { background:#1a3a2a; color:#4ade80; cursor:pointer; }
+    .cal-cell.has-sell { background:#3a1a1a; color:#f87171; cursor:pointer; }
+    .cal-cell.has-both { background:#2a2a1a; color:#facc15; cursor:pointer; }
+    .cal-cell.today { border:1px solid #3b82f6; }
+    .cal-header { color:#64748b; text-align:center; font-size:10px; padding:4px 0; }
+
+    /* 收益曲线 */
+    #equityChart { width:100%; height:150px; }
+
+    /* 主题切换 */
+    body.light-theme {
+      --bg:#f8fafc; --surface:#fff; --surface2:#f1f5f9; --border:#e2e8f0;
+      --text1:#0f172a; --text2:#334155; --text3:#64748b;
+      --accent:#2563eb; --accent2:#7c3aed;
+    }
+    body.light-theme .bubble.ai { background:#f1f5f9; color:#0f172a; }
+    body.light-theme .bubble.user { background:#2563eb; color:#fff; }
+  </style>
+
 </head>
 <body>
 <canvas id="fx-canvas"></canvas>
@@ -566,6 +650,14 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   </div>
 </div>
 
+
+<!-- 导出工具栏 -->
+<div class="export-toolbar" id="exportToolbar">
+  <span style="color:#94a3b8;font-size:13px">点击选择要导出的消息</span>
+  <button onclick="doExport()">📷 导出长图</button>
+  <button class="cancel" onclick="cancelExportMode()">取消</button>
+</div>
+
 <!-- LAYOUT -->
 <div class="layout">
 
@@ -585,6 +677,20 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 
   <!-- MAIN -->
   <div class="main">
+
+
+    <!-- GLOBAL SEARCH BAR -->
+    <div style="padding:6px 12px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <div class="search-wrap" style="flex:1;position:relative">
+        <input id="globalSearch" type="text" placeholder="🔍 搜索股票代码或名称…"
+          style="width:100%;box-sizing:border-box;background:#0d1525;border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text1);font-size:13px;outline:none"
+          oninput="onSearchInput(this.value)" onblur="setTimeout(()=>closeSearch(),200)">
+        <div class="search-drop" id="searchDrop" style="display:none"></div>
+      </div>
+      <button title="字体缩小" onclick="adjustFont(-1)" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">A-</button>
+      <button title="字体放大" onclick="adjustFont(1)"  style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">A+</button>
+      <button title="切换主题" onclick="toggleTheme()" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">🌗</button>
+    </div>
 
     <!-- MARKET BAR -->
     <div class="market-bar">
@@ -608,6 +714,17 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
             <div class="sug-chip" onclick="quickAsk(this)">对比三大指数与A股的关系</div>
           </div>
         </div>
+      </div>
+
+
+      <!-- QUICK ACTIONS BAR -->
+      <div style="max-width:800px;margin:0 auto 6px;display:flex;gap:6px;flex-wrap:wrap;padding:0 4px">
+        <button class="quick-btn" onclick="triggerDiagnosis()">🩺 持仓诊断</button>
+        <button class="quick-btn" onclick="triggerSummary()">📝 对话摘要</button>
+        <button class="quick-btn" onclick="startExportMode()">📷 导出长图</button>
+        <button class="quick-btn" onclick="quickAsk2('帮我分析今天的持仓盈亏情况')">💰 今日盈亏</button>
+        <button class="quick-btn" onclick="quickAsk2('今日A股大盘行情如何，有哪些热点板块？')">📊 大盘分析</button>
+        <button class="quick-btn" onclick="quickAsk2('今天有什么重要的政策和财经新闻？')">📰 今日新闻</button>
       </div>
 
       <!-- INPUT BAR -->
@@ -2049,6 +2166,259 @@ async function saveSettings() {
 document.addEventListener('click', e => {
   const modal = document.getElementById('settingsModal');
   if (e.target === modal) closeSettings();
+});
+</script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  ① 股票搜索
+// ═══════════════════════════════════════════════════════
+let searchTimer = null;
+async function onSearchInput(val) {
+  clearTimeout(searchTimer);
+  const drop = document.getElementById('searchDrop');
+  if (!val || val.length < 1) { drop.style.display='none'; return; }
+  searchTimer = setTimeout(async () => {
+    const r = await fetch(`/api/search?q=${encodeURIComponent(val)}`);
+    const d = await r.json();
+    if (!d.results?.length) { drop.style.display='none'; return; }
+    drop.innerHTML = d.results.map(s => `
+      <div class="search-item" onclick="onSelectStock('${s.code}','${s.name}')">
+        <div>
+          <span class="si-name">${s.name}</span>
+          <span class="si-mkt" style="margin-left:6px">${s.market}</span>
+        </div>
+        <span class="si-code">${s.code}</span>
+      </div>`).join('');
+    drop.style.display = 'block';
+  }, 250);
+}
+function closeSearch() {
+  document.getElementById('searchDrop').style.display = 'none';
+}
+function onSelectStock(code, name) {
+  document.getElementById('globalSearch').value = '';
+  closeSearch();
+  // 弹出操作菜单
+  const action = confirm(`${name}(${code})
+
+点确定 → 加入关注
+点取消 → 直接看K线`);
+  if (action) {
+    addToWatchlistBySearch(code, name);
+  } else {
+    switchTab(document.querySelector('[data-tab="kline"]'));
+    document.getElementById('klineCode').value = code;
+    loadKline(code, currentKlinePeriod, currentKlineAdjust);
+  }
+}
+async function addToWatchlistBySearch(code, name) {
+  await fetch('/api/portfolio/watchlist', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({code, name})
+  });
+  alert(`已添加 ${name}(${code}) 到关注列表`);
+  loadWatchlistTab();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ② 消息收藏星标
+// ═══════════════════════════════════════════════════════
+const starredMsgs = new Set(JSON.parse(localStorage.getItem('starredMsgs')||'[]'));
+function toggleStar(btn, msgId) {
+  if (starredMsgs.has(msgId)) {
+    starredMsgs.delete(msgId);
+    btn.classList.remove('starred');
+    btn.title = '收藏';
+  } else {
+    starredMsgs.add(msgId);
+    btn.classList.add('starred');
+    btn.title = '已收藏';
+  }
+  localStorage.setItem('starredMsgs', JSON.stringify([...starredMsgs]));
+}
+
+// ═══════════════════════════════════════════════════════
+//  ③ 对话长图导出
+// ═══════════════════════════════════════════════════════
+let exportMode = false;
+function startExportMode() {
+  exportMode = true;
+  document.getElementById('exportToolbar').classList.add('active');
+  document.querySelectorAll('.bubble-wrap').forEach(el => {
+    el.classList.add('export-mode');
+    el.onclick = () => el.classList.toggle('selected');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'msg-checkbox';
+    el.querySelector('.bubble')?.prepend(cb);
+  });
+}
+function cancelExportMode() {
+  exportMode = false;
+  document.getElementById('exportToolbar').classList.remove('active');
+  document.querySelectorAll('.bubble-wrap').forEach(el => {
+    el.classList.remove('export-mode','selected');
+    el.onclick = null;
+    el.querySelectorAll('.msg-checkbox').forEach(c=>c.remove());
+  });
+}
+async function doExport() {
+  const selected = [...document.querySelectorAll('.bubble-wrap.selected')];
+  const targets = selected.length > 0 ? selected : [...document.querySelectorAll('.bubble-wrap')];
+  if (!targets.length) { alert('没有消息可以导出'); return; }
+
+  // 创建截图容器
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'background:#0d1a2e;padding:24px;width:700px;font-family:system-ui;position:fixed;left:-9999px;top:0';
+
+  // 标题
+  const title = document.createElement('div');
+  title.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #2a3a5c';
+  title.innerHTML = '<span style="font-size:22px">🪺</span><div><div style="color:#e2e8f0;font-weight:700;font-size:16px">TradeNest</div><div style="color:#64748b;font-size:12px">' + new Date().toLocaleString('zh-CN') + '</div></div>';
+  wrap.appendChild(title);
+
+  // 复制消息
+  targets.forEach(el => {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('.msg-star,.export-btn,.msg-checkbox').forEach(e=>e.remove());
+    clone.style.marginBottom = '12px';
+    wrap.appendChild(clone);
+  });
+
+  // 免责声明
+  const disc = document.createElement('div');
+  disc.style.cssText = 'margin-top:16px;padding-top:12px;border-top:1px solid #2a3a5c;color:#475569;font-size:11px;text-align:center';
+  disc.textContent = '本内容由 TradeNest AI 生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。';
+  wrap.appendChild(disc);
+
+  document.body.appendChild(wrap);
+  try {
+    const canvas = await html2canvas(wrap, {backgroundColor:'#0d1a2e', scale:2, useCORS:true});
+    const link = document.createElement('a');
+    link.download = `tradenest-${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } finally {
+    document.body.removeChild(wrap);
+    cancelExportMode();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ④ 持仓诊断报告
+// ═══════════════════════════════════════════════════════
+async function triggerDiagnosis() {
+  const r = await fetch('/api/portfolio/positions');
+  const d = await r.json();
+  if (!d.positions?.length) { alert('暂无持仓，请先添加持仓'); return; }
+  const list = d.positions.map(p =>
+    `${p.name}(${p.code})：持仓${p.total_shares}股，均价¥${p.avg_cost}，当前¥${p.current_price}，盈亏${p.profit_pct}%`
+  ).join('；');
+  const msg = `请对我的所有持仓做全面诊断分析：${list}。包括：1.每只票的技术面和基本面分析；2.当前盈亏原因；3.建议持有/加仓/减仓/止损；4.整体仓位结构建议。`;
+  document.getElementById('inputBox').value = msg;
+  sendMessage();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ⑤ 对话摘要
+// ═══════════════════════════════════════════════════════
+async function triggerSummary() {
+  const msgs = document.querySelectorAll('.bubble-wrap');
+  if (msgs.length < 2) { alert('对话内容太少，无法摘要'); return; }
+  const msg = '请对我们刚才的对话做一个结构化总结，包括：1.讨论了哪些股票或主题；2.AI给出的核心判断；3.建议的操作方向；4.需要关注的风险点。用要点列表形式输出。';
+  document.getElementById('inputBox').value = msg;
+  sendMessage();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ⑥ 快捷问句（已有 quickAsk，加一个不依赖点击事件的版本）
+// ═══════════════════════════════════════════════════════
+function quickAsk2(text) {
+  document.getElementById('inputBox').value = text;
+  sendMessage();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ⑦ 字体大小调节
+// ═══════════════════════════════════════════════════════
+let fontSize = parseInt(localStorage.getItem('fontSize') || '14');
+function adjustFont(delta) {
+  fontSize = Math.max(11, Math.min(20, fontSize + delta));
+  document.documentElement.style.setProperty('--bubble-font', fontSize + 'px');
+  localStorage.setItem('fontSize', fontSize);
+}
+// 启动时恢复
+adjustFont(0);
+
+// ═══════════════════════════════════════════════════════
+//  ⑧ 主题切换
+// ═══════════════════════════════════════════════════════
+function toggleTheme() {
+  document.body.classList.toggle('light-theme');
+  localStorage.setItem('theme', document.body.classList.contains('light-theme') ? 'light' : 'dark');
+}
+if (localStorage.getItem('theme') === 'light') document.body.classList.add('light-theme');
+
+// ═══════════════════════════════════════════════════════
+//  ⑨ 键盘快捷键
+// ═══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('globalSearch').focus();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+    e.preventDefault();
+    document.querySelector('.sidebar').style.display =
+      document.querySelector('.sidebar').style.display === 'none' ? '' : 'none';
+  }
+  if (e.key === 'Escape' && exportMode) cancelExportMode();
+});
+
+// ═══════════════════════════════════════════════════════
+//  ⑩ 预警历史（加到现有预警 tab 里）
+// ═══════════════════════════════════════════════════════
+async function loadAlertHistory() {
+  const el = document.getElementById('alertHistory');
+  if (!el) return;
+  const r = await fetch('/api/user/alerts');
+  const d = await r.json();
+  const triggered = (d.alerts||[]).filter(a => a.triggered_at);
+  if (!triggered.length) { el.innerHTML = '<div style="color:#475569;font-size:12px;text-align:center;padding:8px">暂无触发历史</div>'; return; }
+  el.innerHTML = triggered.map(a => `
+    <div style="padding:8px;border-bottom:1px solid #1e293b;font-size:12px">
+      <span style="color:#e2e8f0">${a.code}</span>
+      <span style="color:#64748b;margin:0 4px">${a.condition}</span>
+      <span style="color:#f59e0b">${a.target_price}</span>
+      <span style="color:#475569;float:right">${new Date(a.triggered_at*1000).toLocaleDateString('zh-CN')}</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  在渲染消息时自动加星标按钮（patch addMessage）
+// ═══════════════════════════════════════════════════════
+const _origAddMsg = window.addMessage;
+// 改成在 DOMContentLoaded 后 patch，避免 timing 问题
+document.addEventListener('DOMContentLoaded', () => {
+  // 在每条消息右上角加星标按钮
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.classList?.contains('bubble-wrap')) {
+          const msgId = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+          node.dataset.msgId = msgId;
+          const starBtn = document.createElement('button');
+          starBtn.className = 'msg-star' + (starredMsgs.has(msgId) ? ' starred' : '');
+          starBtn.innerHTML = '★';
+          starBtn.title = starredMsgs.has(msgId) ? '已收藏' : '收藏';
+          starBtn.onclick = (e) => { e.stopPropagation(); toggleStar(starBtn, msgId); };
+          node.style.position = 'relative';
+          node.appendChild(starBtn);
+        }
+      });
+    });
+  });
+  const chatMsgs = document.getElementById('chatMsgs');
+  if (chatMsgs) observer.observe(chatMsgs, {childList: true});
 });
 </script>
 </body>
