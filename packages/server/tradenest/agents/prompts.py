@@ -190,11 +190,111 @@ def _get_market_status() -> str:
         return "当前是盘后，今日收盘（15:00后）"
 
 
+def build_portfolio_context() -> str:
+    """实时拉取持仓+关注数据，拼成自然语言上下文，注入 system prompt。"""
+    try:
+        import sqlite3, os, requests as _req
+        db_path = os.path.expanduser("~/.tradenest/history.db")
+        if not os.path.exists(db_path):
+            return ""
+        db = sqlite3.connect(db_path)
+        db.row_factory = sqlite3.Row
+
+        # 持仓
+        positions = db.execute(
+            "SELECT code,name,total_shares,avg_cost,total_cost FROM positions "
+            "WHERE status='holding' AND total_shares>0"
+        ).fetchall()
+
+        # 关注
+        watchlist = db.execute(
+            "SELECT code,name FROM portfolio_watchlist ORDER BY added_at"
+        ).fetchall()
+        db.close()
+
+        if not positions and not watchlist:
+            return ""
+
+        # 拉实时行情
+        all_codes = [p["code"] for p in positions] + [w["code"] for w in watchlist]
+        quotes: dict = {}
+        if all_codes:
+            try:
+                syms = []
+                for c in all_codes:
+                    syms.append(("sh" if c.startswith(("6","9")) else "sz") + c)
+                r = _req.get(f"https://qt.gtimg.cn/q={','.join(syms)}",
+                    headers={"Referer": "https://gu.qq.com/"}, timeout=6)
+                for line in r.text.strip().split("\n"):
+                    if "~" not in line or '"' not in line:
+                        continue
+                    parts = line.split('"')[1].split("~")
+                    code = parts[2]
+                    quotes[code] = {
+                        "name":       parts[1],
+                        "price":      float(parts[3] or 0),
+                        "prev_close": float(parts[4] or 0),
+                        "chg":        float(parts[31] or 0),
+                        "pct":        float(parts[32] or 0),
+                    }
+            except Exception:
+                pass
+
+        lines = []
+
+        # 持仓区块
+        if positions:
+            lines.append("《用户当前持仓》")
+            total_mv = total_cost = today_pnl = total_pnl = 0.0
+            for p in positions:
+                q = quotes.get(p["code"], {})
+                price = q.get("price") or p["avg_cost"]
+                mv    = round(price * p["total_shares"], 2)
+                cost  = p["total_cost"]
+                pnl   = round(mv - cost, 2)
+                pnl_pct = round(pnl / cost * 100, 2) if cost else 0
+                t_pnl = round((price - q.get("prev_close", price)) * p["total_shares"], 2) if q else 0
+                sign  = "+" if pnl >= 0 else ""
+                t_sign = "+" if t_pnl >= 0 else ""
+                name  = q.get("name") or p["name"] or p["code"]
+                lines.append(
+                    f"- {name}({p['code']})：{p['total_shares']:.0f}股，"
+                    f"均价¥{p['avg_cost']:.3f}，当前¥{price}，"
+                    f"总盈亏 {sign}¥{pnl:.2f}({sign}{pnl_pct}%)，"
+                    f"今日 {t_sign}¥{t_pnl:.2f}"
+                )
+                total_mv += mv; total_cost += cost
+                today_pnl += t_pnl; total_pnl += pnl
+            t_sign = "+" if total_pnl >= 0 else ""
+            d_sign = "+" if today_pnl >= 0 else ""
+            lines.append(
+                f"汇总：总市値¥{total_mv:.2f}，持仓总盈亏 {t_sign}¥{total_pnl:.2f}，今日盈亏 {d_sign}¥{today_pnl:.2f}"
+            )
+
+        # 关注区块
+        if watchlist:
+            lines.append("")
+            lines.append("《用户关注列表》")
+            for w in watchlist:
+                q = quotes.get(w["code"], {})
+                price = q.get("price", 0)
+                pct   = q.get("pct", 0)
+                name  = q.get("name") or w["name"] or w["code"]
+                sign  = "+" if pct >= 0 else ""
+                price_str = f"¥{price}" if price else "--"
+                lines.append(f"- {name}({w['code']})：{price_str}，今日 {sign}{pct}%")
+
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def build_system_prompt(
     *,
     role: str = ROLE_GENERAL_RESEARCHER,
     user_framework: str | None = None,
     extra_context: str | None = None,
+    portfolio_context: str | None = None,
 ) -> str:
     """组装完整 system prompt。
 
@@ -217,5 +317,14 @@ def build_system_prompt(
 
     if extra_context:
         parts.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n【相关历史上下文】\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n{extra_context}")
+
+    # 持仓+关注实时数据上下文（每次对话自动注入，AI 可结合具体持仓分析）
+    pf = portfolio_context if portfolio_context is not None else build_portfolio_context()
+    if pf:
+        parts.append(
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            + pf +
+            "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
     return "\n\n".join(parts)
