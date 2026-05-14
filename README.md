@@ -112,18 +112,42 @@
 git clone https://github.com/menglbai/tradenest.git
 cd tradenest
 
-# 2. 装依赖（uv 自动装 Python 虚拟环境）
+# 2. 装依赖
 cd packages/server
 uv venv
 uv pip install fastapi 'uvicorn[standard]' sse-starlette \
   httpx anthropic akshare pandas requests \
   pydantic pydantic-settings python-dotenv structlog rich
 
-# 3. 跑（默认走小红书内部 codewiz LLM 网关，不需要 API key）
+# 3. 配置（必要）
+cp .env.example .env
+# 用任意编辑器打开 .env，按内部注释填写认证信息
+# （详见下方「首次配置」章节）
+
+# 4. 跑
 uv run python -m tradenest.cli info             # 看系统信息
-uv run python -m tradenest.cli health           # 测 Provider 健康
+uv run python -m tradenest.cli health           # 测 LLM 连接
 uv run python -m tradenest.cli chat             # 多轮对话（推荐）
 uv run python -m tradenest.cli ask "你好"        # 单次问答
+```
+
+### 首次配置（必看）
+
+`.env.example` 里有详细注释。两种常见场景：
+
+**场景 A：使用内部 LLM 网关**（需要公司 VPN）
+
+```env
+TRADENEST_GATEWAY_BASE_URL=http://codewiz.devops.xiaohongshu.com/llmadapter/anthropic
+TRADENEST_GATEWAY_EXTRA_HEADERS={"x-adapter-api-key":"你的key","x-adapter-source":"tradenest"}
+```
+
+**场景 B：使用公网 Anthropic API**（需要自己的 API Key）
+
+```env
+TRADENEST_GATEWAY_BASE_URL=https://api.anthropic.com
+ANTHROPIC_API_KEY=sk-ant-你的key
+TRADENEST_GATEWAY_EXTRA_HEADERS={}
 ```
 
 ### 启动 Web 服务
