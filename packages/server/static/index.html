@@ -241,7 +241,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 .mkt-refresh:hover { color: var(--accent); }
 
 /* ───────────── CHAT AREA ───────────── */
-.chat-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.chat-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; position: relative; }
 .chat-msgs {
   flex: 1; overflow-y: auto; padding: 20px 0;
   scroll-behavior: smooth;
@@ -521,9 +521,11 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 
   <style>
     .quick-action-bar {
-      position: fixed; right: 400px; bottom: 80px;
+      position: absolute; left: 8px; bottom: 68px;
       display: flex; flex-direction: column; gap: 5px; z-index: 20;
+      pointer-events: none;
     }
+    .quick-action-bar .qa-btn { pointer-events: all; }
     .qa-btn {
       width: 30px; height: 30px; border-radius: 50%;
       border: 1px solid #1e293b; background: #0d1525cc;
@@ -747,7 +749,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       </div>
 
 
-      <!-- QUICK ACTIONS BAR -->
+<!-- QUICK ACTIONS BAR -->
       <div class="quick-action-bar">
         <button class="qa-btn" onclick="triggerDiagnosis()" title="持仓诊断">🩺</button>
         <button class="qa-btn" onclick="triggerSummary()" title="对话摘要">📝</button>
@@ -756,7 +758,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
         <button class="qa-btn" onclick="quickAsk2('今日A股大盘行情如何，有哪些热点板块？')" title="大盘分析">📊</button>
         <button class="qa-btn" onclick="quickAsk2('今天有什么重要的政策和财经新闻？')" title="今日新闻">📰</button>
       </div>
-
       <!-- INPUT BAR -->
       <div class="input-bar">
         <div class="input-row">
