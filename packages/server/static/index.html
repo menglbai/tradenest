@@ -1437,7 +1437,9 @@ body.light {
         const { value, done } = await reader.read();
         if (done) break;
         pending += decoder.decode(value, { stream: true });
-        // SSE: split on \n\n
+        // SSE: 支持 \n\n 和 \r\n\r\n 两种分隔
+        // 先把所有 \r\n 规范化为 \n
+        pending = pending.replace(/\r\n/g, '\n');
         let idx;
         while ((idx = pending.indexOf('\n\n')) >= 0) {
           const chunk = pending.slice(0, idx);
@@ -1453,11 +1455,9 @@ body.light {
 
           if (evType === 'text_delta') {
             buffer += data.text || '';
-            if (buffer.length < 100) console.log('[stream] text_delta累计:', buffer.length, JSON.stringify(buffer.slice(-50)));
             rerender();
           } else if (evType === 'tool_start') {
-            console.log('[stream] tool_start:', data.tool_name);
-            const name = data.tool_name || data.name || 'tool';
+              const name = data.tool_name || data.name || 'tool';
             const tEl = el('div', { class: 'tool-call' }, `⚙️ 正在调用 ${name}...`);
             toolCallEls[name] = tEl;
             lastBubble.appendChild(tEl);
@@ -1489,7 +1489,6 @@ body.light {
       buffer += `\n\n❌ ${e.message || '请求失败'}`;
       lastBubble.innerHTML = renderMarkdown(buffer);
     } finally {
-      console.log('[stream] finally, buffer.length:', buffer.length, 'preview:', buffer.slice(0, 100));
       assistantMsg.content = buffer;
       assistantMsg._streaming = false;
       const cursor = lastBubble.querySelector('.typing-cursor');
