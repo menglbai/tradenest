@@ -115,15 +115,15 @@ cd tradenest
 # 2. 装依赖（uv 自动装 Python 虚拟环境）
 cd packages/server
 uv venv
-UV_INDEX_URL=https://artifactory.devops.xiaohongshu.com/artifactory/api/pypi/pypi-public/simple/ \
-uv pip install --allow-insecure-host artifactory.devops.xiaohongshu.com \
-  fastapi 'uvicorn[standard]' httpx anthropic akshare pandas \
-  pydantic pydantic-settings python-dotenv structlog rich sse-starlette
+uv pip install fastapi 'uvicorn[standard]' sse-starlette \
+  httpx anthropic akshare pandas requests \
+  pydantic pydantic-settings python-dotenv structlog rich
 
 # 3. 跑（默认走小红书内部 codewiz LLM 网关，不需要 API key）
 uv run python -m tradenest.cli info             # 看系统信息
 uv run python -m tradenest.cli health           # 测 Provider 健康
-uv run python -m tradenest.cli ask "你好"        # 问个问题
+uv run python -m tradenest.cli chat             # 多轮对话（推荐）
+uv run python -m tradenest.cli ask "你好"        # 单次问答
 ```
 
 ### 启动 Web 服务
