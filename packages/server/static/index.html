@@ -361,8 +361,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 }
 /* 拖拽手柄 */
 .panel-resizer {
-  position: absolute; left: -4px; top: 0; bottom: 0; width: 8px;
-  cursor: col-resize; z-index: 100;
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  cursor: col-resize; z-index: 50;
   background: transparent;
 }
 .panel-resizer:hover, .panel-resizer.dragging {
@@ -521,7 +521,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 
   <style>
     .quick-action-bar {
-      position: absolute; right: 12px; bottom: 52px;
+      position: fixed; right: 400px; bottom: 80px;
       display: flex; flex-direction: column; gap: 5px; z-index: 20;
     }
     .qa-btn {
@@ -533,6 +533,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
       transition: all .15s; padding: 0;
     }
     .qa-btn:hover { background: #1e3a5f; border-color: #3b82f6; transform: scale(1.12); }
+
+    .qa-btn { position: relative; }
+    .qa-btn::after {
+      content: attr(title);
+      position: absolute; right: 38px; top: 50%; transform: translateY(-50%);
+      background: #0f172a; color: #e2e8f0; font-size: 11px;
+      white-space: nowrap; padding: 4px 8px; border-radius: 5px;
+      border: 1px solid #334155; pointer-events: none;
+      opacity: 0; transition: opacity .15s;
+    }
+    .qa-btn:hover::after { opacity: 1; }
+
     .bubble-wrap.export-mode { cursor: pointer; }
     .bubble-wrap.export-mode:hover { outline: 2px dashed #3b82f6; border-radius: 8px; }
     .bubble-wrap.selected { outline: 2px solid #3b82f6 !important; background: #1e3a5f22; border-radius: 8px; }
@@ -703,7 +715,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
         <input id="globalSearch" type="text" placeholder="🔍 搜索股票代码或名称…"
           style="width:100%;box-sizing:border-box;background:#0d1525;border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text1);font-size:13px;outline:none"
           oninput="onSearchInput(this.value)" onblur="setTimeout(()=>closeSearch(),200)">
-        <div class="search-drop" id="searchDrop" style="display:none"></div>
+        <div class="search-drop" id="searchDrop" style="display:none" onmousedown="event.preventDefault()"></div>
       </div>
       <button title="字体缩小" onclick="adjustFont(-1)" style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">A-</button>
       <button title="字体放大" onclick="adjustFont(1)"  style="background:#1e293b;border:1px solid #334155;border-radius:6px;width:28px;height:28px;color:#94a3b8;cursor:pointer;font-size:15px">A+</button>
